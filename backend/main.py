@@ -1,8 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 
 app = FastAPI(title="Symphy API")
+
+# --- CORS: allow your web app to call this API ---
+# For now we allow all; you can restrict to your exact domain later.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # change to ["https://symphy-web.onrender.com"] later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class LabItem(BaseModel):
     name: str
@@ -58,3 +69,7 @@ def analyze(data: AnalyzeInput):
 @app.get("/")
 def root():
     return {"status": "Symphy API running successfully"}
+
+@app.head("/")
+def head_root():
+    return Response(status_code=200)
