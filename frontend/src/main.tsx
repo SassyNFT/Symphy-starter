@@ -2,6 +2,12 @@ import React, { useState, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 
+interface Range {
+  low: number;
+  high: number;
+  unit: string;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState("symptoms");
   const [symptoms, setSymptoms] = useState("");
@@ -16,8 +22,9 @@ function App() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [categories, setCategories] = useState<Record<string, string[]>>({});
+  const [ranges, setRanges] = useState<Record<string, Range>>({});
 
-  // ✅ Load Lab Test Categories Safely
+  // ✅ Load Lab Test Categories
   useEffect(() => {
     fetch("/labTests.json")
       .then((res) => {
@@ -31,27 +38,57 @@ function App() {
           .reduce((acc, key) => ({ ...acc, [key]: "" }), {});
         setLabTests(initial);
       })
-      .catch((err) => {
-        console.error("Error loading lab tests:", err);
-        setError("Could not load lab test definitions.");
-      });
+      .catch(() => setError("Could not load lab test definitions."));
   }, []);
 
-  // ✅ Handle Analyze API Call
+  // ✅ Define Reference Ranges
+  useEffect(() => {
+    setRanges({
+      WBC: { low: 4, high: 11, unit: "×10⁹/L" },
+      RBC: { low: 4.2, high: 6.1, unit: "×10¹²/L" },
+      Hemoglobin: { low: 120, high: 170, unit: "g/L" },
+      Hematocrit: { low: 0.37, high: 0.50, unit: "L/L" },
+      Platelets: { low: 150, high: 400, unit: "×10⁹/L" },
+      CRP: { low: 0, high: 5, unit: "mg/L" },
+      Glucose: { low: 3.9, high: 7.8, unit: "mmol/L" },
+      Urea: { low: 2.5, high: 7.5, unit: "mmol/L" },
+      Creatinine: { low: 60, high: 110, unit: "µmol/L" },
+      Sodium: { low: 135, high: 145, unit: "mmol/L" },
+      Potassium: { low: 3.5, high: 5.0, unit: "mmol/L" },
+      Chloride: { low: 98, high: 107, unit: "mmol/L" },
+      Calcium: { low: 2.1, high: 2.6, unit: "mmol/L" },
+      ALT: { low: 0, high: 55, unit: "U/L" },
+      AST: { low: 0, high: 45, unit: "U/L" },
+      ALP: { low: 30, high: 120, unit: "U/L" },
+      Bilirubin: { low: 3, high: 20, unit: "µmol/L" }
+    });
+  }, []);
+
+  // ✅ Determine color based on range
+  const getColor = (test: string, value: string) => {
+    const range = ranges[test];
+    const num = parseFloat(value);
+    if (!range || isNaN(num)) return "black";
+    if (num < range.low) return "#007BFF"; // blue = low
+    if (num > range.high) return "#D90429"; // red = high
+    return "#009E60"; // green = normal
+  };
+
+  // ✅ Analyze via API
   const handleAnalyze = async () => {
     setError("");
     setResult("");
 
     const labs = Object.entries(labTests)
-      .filter(([_, value]) => value !== "")
+      .filter(([_, v]) => v !== "")
       .map(([name, value]) => ({
         name,
         value: parseFloat(value),
-        unit: "unit"
+        unit: ranges[name]?.unit || "unit"
       }));
 
     const vitalsArray = Object.entries(vitals)
-      .filter(([_, value]) => value !== "")
+      .filter(([_, v]) => v !== "")
       .map(([name, value]) => ({
         name,
         value: parseFloat(value),
@@ -62,9 +99,7 @@ function App() {
             ? "bpm"
             : name === "BP"
             ? "mmHg"
-            : name === "O2"
-            ? "%"
-            : ""
+            : "%"
       }));
 
     const payload = {
@@ -77,17 +112,15 @@ function App() {
     };
 
     try {
-      const response = await fetch("https://symphy-api.onrender.com/analyze", {
+      const res = await fetch("https://symphy-api.onrender.com/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
-      if (!response.ok) throw new Error("API request failed");
-      const data = await response.json();
+      if (!res.ok) throw new Error("API request failed");
+      const data = await res.json();
       setResult(JSON.stringify(data, null, 2));
     } catch (err) {
-      console.error("Analysis error:", err);
       setError("Error: " + (err as Error).message);
     }
   };
@@ -103,7 +136,7 @@ function App() {
     >
       <h1>Symphy • Clinical Analyzer</h1>
 
-      {/* Tab Navigation */}
+      {/* Tabs */}
       <div style={{ display: "flex", marginBottom: "20px" }}>
         {["symptoms", "labs", "vitals"].map((tab) => (
           <button
@@ -124,7 +157,7 @@ function App() {
         ))}
       </div>
 
-      {/* Symptoms Tab */}
+      {/* Symptoms */}
       {activeTab === "symptoms" && (
         <div>
           <h3>Patient Symptoms</h3>
@@ -144,7 +177,7 @@ function App() {
         </div>
       )}
 
-      {/* Labs Tab */}
+      {/* Labs */}
       {activeTab === "labs" && (
         <div>
           <h3>Laboratory Tests</h3>
@@ -164,10 +197,10 @@ function App() {
           />
 
           {Object.entries(categories).map(([category, tests]) => {
-            const visibleTests = tests.filter((t) =>
+            const visible = tests.filter((t) =>
               t.toLowerCase().includes(searchTerm.toLowerCase())
             );
-            if (visibleTests.length === 0) return null;
+            if (visible.length === 0) return null;
 
             return (
               <div key={category} style={{ marginBottom: "15px" }}>
@@ -187,25 +220,38 @@ function App() {
                     gap: "8px"
                   }}
                 >
-                  {visibleTests.map((test) => (
-                    <div key={test}>
-                      <label>{test}</label>
-                      <input
-                        type="number"
-                        step="any"
-                        value={labTests[test] || ""}
-                        onChange={(e) =>
-                          setLabTests({ ...labTests, [test]: e.target.value })
-                        }
-                        style={{
-                          width: "100%",
-                          padding: "4px",
-                          borderRadius: "4px",
-                          border: "1px solid #ccc"
-                        }}
-                      />
-                    </div>
-                  ))}
+                  {visible.map((test) => {
+                    const range = ranges[test];
+                    const color = getColor(test, labTests[test]);
+                    return (
+                      <div key={test}>
+                        <label>{test}</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={labTests[test] || ""}
+                          onChange={(e) =>
+                            setLabTests({
+                              ...labTests,
+                              [test]: e.target.value
+                            })
+                          }
+                          style={{
+                            width: "100%",
+                            padding: "4px",
+                            borderRadius: "4px",
+                            border: "1px solid #ccc",
+                            color
+                          }}
+                        />
+                        {range && (
+                          <small style={{ color: "#666" }}>
+                            Normal: {range.low}–{range.high} {range.unit}
+                          </small>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -213,7 +259,7 @@ function App() {
         </div>
       )}
 
-      {/* Vitals Tab */}
+      {/* Vitals */}
       {activeTab === "vitals" && (
         <div>
           <h3>Vital Signs</h3>
@@ -247,7 +293,7 @@ function App() {
         </div>
       )}
 
-      {/* Analyze Button */}
+      {/* Analyze */}
       <button
         onClick={handleAnalyze}
         style={{
@@ -264,14 +310,12 @@ function App() {
         Analyze
       </button>
 
-      {/* Error Display */}
       {error && (
         <p style={{ color: "red", marginTop: "20px", fontWeight: "bold" }}>
           {error}
         </p>
       )}
 
-      {/* API Result */}
       {result && (
         <pre
           style={{
