@@ -1,0 +1,50 @@
+{
+  "Hematology": [
+    "WBC",
+    "RBC",
+    "Hemoglobin",
+    "Hematocrit",
+    "MCV",
+    "MCH",
+    "MCHC",
+    "RDW",
+    "Platelets"
+  ],
+  "Inflammatory": ["CRP", "ESR"],
+  "Metabolic": [
+    "Glucose",
+    "Urea",
+    "Creatinine",
+    "Sodium",
+    "Potassium",
+    "Chloride",
+    "Calcium",
+    "Magnesium"
+  ],
+  "Liver": ["ALT", "AST", "ALP", "GGT", "LDH", "Bilirubin"],
+  "Lipids": ["Cholesterol", "HDL", "LDL", "Triglycerides"],
+  "Endocrine": ["TSH", "Free T4", "Free T3", "Cortisol", "Insulin"],
+  "Iron Studies": ["Iron", "Ferritin", "Transferrin", "TIBC"],
+  "Proteins": ["Albumin", "Total Protein"],
+  "Renal": ["eGFR", "BUN", "Uric Acid"],
+  "Cardiac": ["Troponin T", "CK", "CK-MB"],
+  "Vitamins": ["Vitamin B12", "Folate", "Vitamin D"],
+  "Urinalysis": [
+    "Urine Protein",
+    "Urine Glucose",
+    "Urine Ketones",
+    "Urine RBCs",
+    "Urine WBCs"
+  ],
+  "Immunology": ["ANA", "Rheumatoid Factor", "CRP", "ASO Titre"],
+  "Hormones": ["Estradiol", "Progesterone", "Testosterone", "Prolactin", "LH", "FSH"],
+  "Infectious Disease": [
+    "Hepatitis B Surface Antigen",
+    "Hepatitis C Antibody",
+    "HIV",
+    "Syphilis",
+    "CMV IgM",
+    "EBV IgM"
+  ],
+  "Other": ["HCG", "PSA", "Amylase", "Lipase", "Lactate", "Phosphate"]
+}
