@@ -1,6 +1,11 @@
 import React, { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
+// Build a full URL even if VITE_API_BASE is just a host
+const RAW = import.meta.env.VITE_API_BASE as string | undefined
+const API_BASE = RAW
+  ? (RAW.startsWith('http') ? RAW : `https://${RAW}`)
+  : 'https://symphy-api.onrender.com'
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://symphy-api.onrender.com'
 
 function App() {
