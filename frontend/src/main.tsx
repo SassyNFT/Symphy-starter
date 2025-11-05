@@ -1,89 +1,109 @@
-import React, { useState } from 'react'
-import ReactDOM from 'react-dom/client'
+import React, { useState } from "react";
+import ReactDOM from "react-dom/client";
 
-// ✅ Fix: always ensure API_BASE starts with https://
-const RAW = import.meta.env.VITE_API_BASE as string | undefined
-const API_BASE = RAW
-  ? (RAW.startsWith('http') ? RAW : `https://${RAW}`)
-  : 'https://symphy-api.onrender.com'
+const API_URL = "https://symphy-api.onrender.com/analyze"; // ✅ Correct backend link (no port!)
 
 function App() {
-  const [symptoms, setSymptoms] = useState('fatigue, tooth root pain top left')
-  const [crp, setCrp] = useState(6.8)
-  const [result, setResult] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [symptoms, setSymptoms] = useState("");
+  const [crp, setCrp] = useState("");
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function analyze() {
-    setLoading(true)
-    setError(null)
-    setResult(null)
+  async function handleAnalyze() {
+    setError("");
+    setResult("");
+    setLoading(true);
+
     try {
-      const res = await fetch(`${API_BASE}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient: { age: 24, sex: 'M' },
           symptoms_free_text: symptoms,
-          labs: [{ name: 'CRP', value: crp, unit: 'mg/L' }],
+          labs: crp
+            ? [{ name: "CRP", value: parseFloat(crp), unit: "mg/L" }]
+            : [],
           include_natural_remedies: true,
           max_candidates: 5,
-          language: 'en'
-        })
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setResult(data)
-    } catch (e: any) {
-      setError(e.message)
+          language: "en",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResult(JSON.stringify(data, null, 2));
+    } catch (err) {
+      console.error("Error:", err);
+      setError("Error: Unable to connect to API or invalid response.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: '24px auto', fontFamily: 'system-ui' }}>
-      <h2>Symphy • Medical Search</h2>
-      <textarea
-        rows={3}
-        style={{ width: '100%' }}
+    <div style={{ fontFamily: "Arial, sans-serif", padding: "20px" }}>
+      <h1>
+        <strong>Symphy • Medical Search</strong>
+      </h1>
+
+      <input
+        type="text"
         value={symptoms}
-        onChange={e => setSymptoms(e.target.value)}
+        onChange={(e) => setSymptoms(e.target.value)}
+        placeholder="Enter symptoms here"
+        style={{ width: "100%", padding: "10px", fontSize: "16px" }}
       />
-      <div style={{ marginTop: 8 }}>
-        CRP:{' '}
+      <br />
+      <label style={{ marginTop: "10px", display: "block" }}>
+        CRP:{" "}
         <input
-          type="number"
+          type="text"
           value={crp}
-          onChange={e => setCrp(Number(e.target.value))}
-        />{' '}
+          onChange={(e) => setCrp(e.target.value)}
+          placeholder="e.g. 6.8"
+          style={{ padding: "5px" }}
+        />{" "}
         mg/L
-      </div>
-      <button onClick={analyze} disabled={loading}>
-        {loading ? 'Analyzing…' : 'Analyze'}
+      </label>
+      <br />
+      <button
+        onClick={handleAnalyze}
+        disabled={loading}
+        style={{
+          padding: "10px 20px",
+          fontSize: "16px",
+          backgroundColor: "#0078ff",
+          color: "white",
+          border: "none",
+          cursor: "pointer",
+        }}
+      >
+        {loading ? "Analyzing..." : "Analyze"}
       </button>
 
-      {error && <div style={{ color: 'red', marginTop: 12 }}>Error: {error}</div>}
+      {error && (
+        <p style={{ color: "red", marginTop: "20px" }}>{error}</p>
+      )}
+
       {result && (
-        <div style={{ marginTop: 16 }}>
-          {result.candidates?.map((c: any, i: number) => (
-            <div
-              key={i}
-              style={{
-                border: '1px solid #ccc',
-                padding: 10,
-                borderRadius: 6,
-                marginBottom: 10
-              }}
-            >
-              <b>{c.disease.name}</b>
-              <div>{c.overview_summary}</div>
-            </div>
-          ))}
-        </div>
+        <pre
+          style={{
+            background: "#f4f4f4",
+            padding: "15px",
+            borderRadius: "5px",
+            marginTop: "20px",
+            overflowX: "auto",
+          }}
+        >
+          {result}
+        </pre>
       )}
     </div>
-  )
+  );
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />)
+ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
