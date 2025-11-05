@@ -18,7 +18,7 @@ function App() {
   const [categories, setCategories] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
-    fetch("/data/labTests.json")
+    fetch("/labTests.json")
       .then((res) => res.json())
       .then((data) => {
         setCategories(data);
