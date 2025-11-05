@@ -4,7 +4,7 @@ services:
     name: symphy-api
     env: docker
     rootDir: backend
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: Dockerfile   # <— FIX: relative to rootDir
     plan: free
     autoDeploy: true
     healthCheckPath: /docs
