@@ -1,12 +1,11 @@
 import React, { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
-// Build a full URL even if VITE_API_BASE is just a host
+// ✅ Fix: always ensure API_BASE starts with https://
 const RAW = import.meta.env.VITE_API_BASE as string | undefined
 const API_BASE = RAW
   ? (RAW.startsWith('http') ? RAW : `https://${RAW}`)
   : 'https://symphy-api.onrender.com'
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://symphy-api.onrender.com'
 
 function App() {
   const [symptoms, setSymptoms] = useState('fatigue, tooth root pain top left')
@@ -26,7 +25,7 @@ function App() {
         body: JSON.stringify({
           patient: { age: 24, sex: 'M' },
           symptoms_free_text: symptoms,
-          labs: [{ name: 'CRP', value: String(crp), unit: 'mg/L' }],
+          labs: [{ name: 'CRP', value: crp, unit: 'mg/L' }],
           include_natural_remedies: true,
           max_candidates: 5,
           language: 'en'
