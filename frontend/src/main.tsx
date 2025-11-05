@@ -17,18 +17,27 @@ function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categories, setCategories] = useState<Record<string, string[]>>({});
 
+  // ✅ Load Lab Test Categories Safely
   useEffect(() => {
     fetch("/labTests.json")
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load lab tests");
+        return res.json();
+      })
       .then((data) => {
         setCategories(data);
         const initial = Object.values(data)
           .flat()
           .reduce((acc, key) => ({ ...acc, [key]: "" }), {});
         setLabTests(initial);
+      })
+      .catch((err) => {
+        console.error("Error loading lab tests:", err);
+        setError("Could not load lab test definitions.");
       });
   }, []);
 
+  // ✅ Handle Analyze API Call
   const handleAnalyze = async () => {
     setError("");
     setResult("");
@@ -78,14 +87,23 @@ function App() {
       const data = await response.json();
       setResult(JSON.stringify(data, null, 2));
     } catch (err) {
+      console.error("Analysis error:", err);
       setError("Error: " + (err as Error).message);
     }
   };
 
   return (
-    <div style={{ fontFamily: "sans-serif", padding: "40px", maxWidth: "1000px", margin: "0 auto" }}>
+    <div
+      style={{
+        fontFamily: "sans-serif",
+        padding: "40px",
+        maxWidth: "1100px",
+        margin: "0 auto"
+      }}
+    >
       <h1>Symphy • Clinical Analyzer</h1>
 
+      {/* Tab Navigation */}
       <div style={{ display: "flex", marginBottom: "20px" }}>
         {["symptoms", "labs", "vitals"].map((tab) => (
           <button
@@ -97,7 +115,8 @@ function App() {
               cursor: "pointer",
               background: activeTab === tab ? "#007BFF" : "#f1f1f1",
               color: activeTab === tab ? "white" : "black",
-              border: "1px solid #ddd"
+              border: "1px solid #ddd",
+              fontWeight: "bold"
             }}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -105,7 +124,7 @@ function App() {
         ))}
       </div>
 
-      {/* Symptoms */}
+      {/* Symptoms Tab */}
       {activeTab === "symptoms" && (
         <div>
           <h3>Patient Symptoms</h3>
@@ -114,12 +133,18 @@ function App() {
             onChange={(e) => setSymptoms(e.target.value)}
             rows={6}
             placeholder="Describe symptoms here..."
-            style={{ width: "100%", padding: "10px", fontSize: "16px" }}
+            style={{
+              width: "100%",
+              padding: "10px",
+              fontSize: "16px",
+              borderRadius: "5px",
+              border: "1px solid #ccc"
+            }}
           />
         </div>
       )}
 
-      {/* Labs */}
+      {/* Labs Tab */}
       {activeTab === "labs" && (
         <div>
           <h3>Laboratory Tests</h3>
@@ -132,7 +157,9 @@ function App() {
               width: "100%",
               padding: "8px",
               marginBottom: "10px",
-              fontSize: "15px"
+              fontSize: "15px",
+              borderRadius: "5px",
+              border: "1px solid #ccc"
             }}
           />
 
@@ -144,7 +171,15 @@ function App() {
 
             return (
               <div key={category} style={{ marginBottom: "15px" }}>
-                <h4 style={{ borderBottom: "1px solid #ccc" }}>{category}</h4>
+                <h4
+                  style={{
+                    borderBottom: "1px solid #ccc",
+                    background: "#fafafa",
+                    padding: "5px 0"
+                  }}
+                >
+                  {category}
+                </h4>
                 <div
                   style={{
                     display: "grid",
@@ -162,7 +197,12 @@ function App() {
                         onChange={(e) =>
                           setLabTests({ ...labTests, [test]: e.target.value })
                         }
-                        style={{ width: "100%", padding: "4px" }}
+                        style={{
+                          width: "100%",
+                          padding: "4px",
+                          borderRadius: "4px",
+                          border: "1px solid #ccc"
+                        }}
                       />
                     </div>
                   ))}
@@ -173,11 +213,17 @@ function App() {
         </div>
       )}
 
-      {/* Vitals */}
+      {/* Vitals Tab */}
       {activeTab === "vitals" && (
         <div>
           <h3>Vital Signs</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: "10px"
+            }}
+          >
             {Object.keys(vitals).map((key) => (
               <div key={key}>
                 <label>{key}</label>
@@ -185,8 +231,15 @@ function App() {
                   type="number"
                   step="any"
                   value={vitals[key as keyof typeof vitals]}
-                  onChange={(e) => setVitals({ ...vitals, [key]: e.target.value })}
-                  style={{ width: "100%", padding: "5px" }}
+                  onChange={(e) =>
+                    setVitals({ ...vitals, [key]: e.target.value })
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "5px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc"
+                  }}
                 />
               </div>
             ))}
@@ -194,22 +247,31 @@ function App() {
         </div>
       )}
 
+      {/* Analyze Button */}
       <button
         onClick={handleAnalyze}
         style={{
-          marginTop: "20px",
-          padding: "10px 20px",
+          marginTop: "25px",
+          padding: "10px 25px",
           background: "#007BFF",
           color: "white",
           border: "none",
           cursor: "pointer",
-          borderRadius: "5px"
+          borderRadius: "6px",
+          fontSize: "16px"
         }}
       >
         Analyze
       </button>
 
-      {error && <p style={{ color: "red", marginTop: "20px" }}>{error}</p>}
+      {/* Error Display */}
+      {error && (
+        <p style={{ color: "red", marginTop: "20px", fontWeight: "bold" }}>
+          {error}
+        </p>
+      )}
+
+      {/* API Result */}
       {result && (
         <pre
           style={{
