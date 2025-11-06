@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Iron deficiency anemia",
+    "slug": "iron-deficiency-anemia",
+    "icd": "D50.9",
+    "overview": "Microcytic anemia from insufficient iron intake, chronic blood loss, or increased demand.",
+    "symptoms_common": ["Fatigue", "Pallor", "Exertional dyspnea", "Pica"],
+    "labs_key": ["↓ Hemoglobin", "↓ MCV", "↓ Ferritin", "↑ TIBC"],
+    "red_flags": ["Severe fatigue limiting daily activity", "Signs of GI bleeding"],
+    "references": [
+      {"title": "BC Guidelines: Iron Deficiency – Diagnosis and Management", "url": "https://www2.gov.bc.ca/"},
+      {"title": "UpToDate – Iron deficiency anemia in adults", "url": "https://www.uptodate.com/"}
+    ]
+  },
+  {
+    "name": "Type 2 diabetes mellitus",
+    "slug": "type-2-diabetes-mellitus",
+    "icd": "E11.9",
+    "overview": "Chronic hyperglycemia due to insulin resistance and beta-cell dysfunction.",
+    "symptoms_common": ["Polyuria", "Polydipsia", "Blurred vision", "Recurrent infections"],
+    "labs_key": ["FPG ≥7.0 mmol/L", "A1C ≥6.5%", "2-hr OGTT ≥11.1 mmol/L"],
+    "red_flags": ["DKA symptoms", "Hyperosmolar state"],
+    "references": [
+      {"title": "Diabetes Canada 2023 Guidelines", "url": "https://www.diabetes.ca/"}
+    ]
+  },
+  {
+    "name": "Viral upper respiratory infection",
+    "slug": "viral-upper-respiratory-infection",
+    "icd": "J06.9",
+    "overview": "Self-limited viral infection of the upper airway (rhinovirus, coronavirus, etc.).",
+    "symptoms_common": ["Cough", "Rhinorrhea", "Sore throat", "Low-grade fever"],
+    "labs_key": [],
+    "red_flags": ["Respiratory distress", "Persistent high fever >3 days", "Severe unilateral facial pain (sinusitis)"],
+    "references": []
+  },
+  {
+    "name": "Asthma",
+    "slug": "asthma",
+    "icd": "J45.909",
+    "overview": "Chronic airway inflammation with variable airflow obstruction and hyperresponsiveness.",
+    "symptoms_common": ["Wheezing", "Cough", "Chest tightness", "Dyspnea"],
+    "labs_key": ["↓ FEV1/FVC", "Bronchodilator response"],
+    "red_flags": ["Silent chest", "Cyanosis", "Inability to speak full sentences"],
+    "references": []
+  },
+  {
+    "name": "Acute appendicitis",
+    "slug": "acute-appendicitis",
+    "icd": "K35.80",
+    "overview": "Inflammation of the appendix, usually due to luminal obstruction.",
+    "symptoms_common": ["Periumbilical pain migrating to RLQ", "Anorexia", "Nausea", "Fever"],
+    "labs_key": ["↑ WBC", "↑ CRP"],
+    "red_flags": ["Peritonitis signs", "Sepsis"],
+    "references": []
+  },
+  {
+    "name": "Chronic periodontal infection",
+    "slug": "chronic-periodontal-infection",
+    "icd": "K05.3",
+    "overview": "Chronic bacterial infection of the periodontium leading to gingival inflammation and bone loss.",
+    "symptoms_common": ["Gingival bleeding", "Halitosis", "Tooth mobility"],
+    "labs_key": [],
+    "red_flags": ["Deep fascial space infection", "Systemic signs"],
+    "references": []
+  },
+  {
+    "name": "Hypothyroidism",
+    "slug": "hypothyroidism",
+    "icd": "E03.9",
+    "overview": "Insufficient thyroid hormone production.",
+    "symptoms_common": ["Fatigue", "Cold intolerance", "Weight gain", "Constipation"],
+    "labs_key": ["↑ TSH", "↓ Free T4"],
+    "red_flags": ["Myxedema coma"],
+    "references": []
+  },
+  {
+    "name": "Community-acquired pneumonia",
+    "slug": "community-acquired-pneumonia",
+    "icd": "J18.9",
+    "overview": "Infection of the lung parenchyma acquired outside the hospital.",
+    "symptoms_common": ["Fever", "Cough", "Pleuritic chest pain", "Dyspnea"],
+    "labs_key": ["CXR infiltrate", "↑ CRP/↑ WBC"],
+    "red_flags": ["SpO2 ≤ 92%", "Hypotension", "Confusion"],
+    "references": []
+  },
+  {
+    "name": "Acute kidney injury",
+    "slug": "acute-kidney-injury",
+    "icd": "N17.9",
+    "overview": "Abrupt decline in renal function causing retention of nitrogenous waste.",
+    "symptoms_common": ["Decreased urine output", "Edema", "Fatigue"],
+    "labs_key": ["↑ Creatinine", "↑ Urea", "Electrolyte disturbances"],
+    "red_flags": ["Hyperkalemia", "Pulmonary edema", "Uremic symptoms"],
+    "references": []
+  },
+  {
+    "name": "Migraine without aura",
+    "slug": "migraine-without-aura",
+    "icd": "G43.009",
+    "overview": "Recurrent unilateral throbbing headaches with nausea/photophobia.",
+    "symptoms_common": ["Unilateral headache", "Photophobia", "Phonophobia", "Nausea"],
+    "labs_key": [],
+    "red_flags": ["‘Worst headache of life’", "Focal neurologic deficit", "Fever/neck stiffness"],
+    "references": []
+  }
+]
