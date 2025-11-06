@@ -1,0 +1,114 @@
+[
+  {
+    "name": "Chronic periodontal infection",
+    "slug": "chronic-periodontal-infection",
+    "icd": "K05.3",
+    "overview": "A chronic bacterial infection of the periodontium leading to gingival inflammation, pocketing, and possible bone loss. Often associated with poor oral hygiene, smoking, diabetes, or immunosuppression.",
+    "symptoms_common": [
+      "Tooth root or gum pain",
+      "Bleeding gums",
+      "Gum recession",
+      "Halitosis",
+      "Loose teeth"
+    ],
+    "labs_key": [
+      "CRP may be mildly elevated in acute flares",
+      "WBC usually normal unless systemic involvement"
+    ],
+    "red_flags": [
+      "Facial swelling or trismus (consider deep space infection)",
+      "Systemic toxicity, fever, dysphagia (consider Ludwig’s angina)"
+    ],
+    "references": [
+      {
+        "title": "Canadian Dental Association – Periodontal Disease",
+        "url": "https://www.cda-adc.ca/"
+      }
+    ],
+    "notes_from_doctors": []
+  },
+  {
+    "name": "Iron deficiency anemia",
+    "slug": "iron-deficiency-anemia",
+    "icd": "D50.9",
+    "overview": "Microcytic anemia caused by insufficient iron. In adults, most commonly due to blood loss; in children, dietary deficiency. Treat cause + replenish iron.",
+    "symptoms_common": [
+      "Fatigue, exercise intolerance",
+      "Pallor",
+      "Restless legs",
+      "Pica"
+    ],
+    "labs_key": [
+      "Low Hb/Hct, low MCV/MCH",
+      "Low Ferritin, low Transferrin saturation, elevated TIBC"
+    ],
+    "red_flags": [
+      "GI bleeding (melena, hematochezia), weight loss",
+      "Unexplained anemia in men/post-menopausal women (evaluate GI tract)"
+    ],
+    "references": [
+      {
+        "title": "BC Guidelines – Iron Deficiency",
+        "url": "https://www2.gov.bc.ca/"
+      }
+    ],
+    "notes_from_doctors": []
+  },
+  {
+    "name": "Viral upper respiratory infection",
+    "slug": "viral-uri",
+    "icd": "J06.9",
+    "overview": "Self-limited viral infection of the upper airway (rhinovirus, coronavirus, etc.). Symptomatic care; antibiotics not indicated.",
+    "symptoms_common": [
+      "Rhinorrhea, congestion",
+      "Sore throat",
+      "Cough",
+      "Low-grade fever"
+    ],
+    "labs_key": [
+      "No routine labs required",
+      "CRP/WBC often normal or mildly elevated"
+    ],
+    "red_flags": ["Respiratory distress", "Persistent high fever", "Suspected pneumonia"],
+    "references": [
+      {
+        "title": "Choosing Wisely Canada – URI",
+        "url": "https://choosingwiselycanada.org/"
+      }
+    ],
+    "notes_from_doctors": []
+  },
+  {
+    "name": "Type 2 diabetes mellitus",
+    "slug": "type-2-diabetes-mellitus",
+    "icd": "E11.9",
+    "overview": "Chronic hyperglycemia from insulin resistance ± relative insulin deficiency. Lifestyle + pharmacotherapy; screen for complications.",
+    "symptoms_common": ["Polyuria, polydipsia", "Fatigue", "Blurred vision"],
+    "labs_key": [
+      "FPG ≥7.0 mmol/L or A1C ≥6.5% (on repeat/confirmatory testing)",
+      "Dyslipidemia common"
+    ],
+    "red_flags": ["DKA/HHS symptoms", "Infections (skin/urinary)"],
+    "references": [
+      { "title": "Diabetes Canada – Clinical Practice Guidelines", "url": "https://www.diabetes.ca/" }
+    ],
+    "notes_from_doctors": []
+  },
+  {
+    "name": "Acute myocardial infarction",
+    "slug": "acute-myocardial-infarction",
+    "icd": "I21.9",
+    "overview": "Acute ischemic myocardial necrosis. Time-critical: MONA, ECG, troponin, reperfusion (PCI).",
+    "symptoms_common": [
+      "Chest pressure radiating to arm/jaw",
+      "Dyspnea, diaphoresis, nausea",
+      "Atypical presentations in women/diabetes/elderly"
+    ],
+    "labs_key": ["Elevated Troponin", "Possible CK-MB elevation", "ECG changes"],
+    "red_flags": ["Hemodynamic instability", "New heart failure", "Arrhythmia"],
+    "references": [
+      { "title": "Heart & Stroke Foundation of Canada – ACS", "url": "https://www.heartandstroke.ca/" }
+    ],
+    "notes_from_doctors": []
+  }
+]
