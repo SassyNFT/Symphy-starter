@@ -1,34 +1,56 @@
 from flask import Flask, jsonify
-import os
 import psycopg2
-import json
+import os
 
 app = Flask(__name__)
 
-def connect():
-    db_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_URL_INTERNAL")
-    if not db_url:
-        raise RuntimeError("DATABASE_URL / DATABASE_URL_INTERNAL is not set")
-    return psycopg2.connect(db_url, sslmode="require")
+# Database connection
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL not set")
 
-@app.route("/")
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL)
+
+@app.route('/')
 def home():
     return jsonify({"message": "✅ Symphy API is live!"})
 
-@app.route("/diseases", methods=["GET"])
+@app.route('/diseases', methods=['GET'])
 def get_diseases():
+    """Fetch all diseases from the database"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+
     try:
-        conn = connect()
-        cur = conn.cursor()
-        cur.execute("SELECT icd, name, slug, overview, symptoms_common, labs_key, red_flags FROM diseases LIMIT 50;")
+        cur.execute("""
+            SELECT icd, name, slug, overview, symptoms_common, labs_key, red_flags, references
+            FROM diseases
+        """)
         rows = cur.fetchall()
-        columns = [desc[0] for desc in cur.description]
-        data = [dict(zip(columns, row)) for row in rows]
-        cur.close()
-        conn.close()
-        return jsonify(data)
+
+        # Convert to JSON
+        diseases = []
+        for row in rows:
+            diseases.append({
+                "icd": row[0],
+                "name": row[1],
+                "slug": row[2],
+                "overview": row[3],
+                "symptoms_common": row[4],
+                "labs_key": row[5],
+                "red_flags": row[6],
+                "references": row[7]
+            })
+
+        return jsonify(diseases)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
