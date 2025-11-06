@@ -37,7 +37,7 @@ print("✅ Table created or already exists.")
 # Download and load WHO / ICD disease list
 # (small sample for testing first)
 # ─────────────────────────────────────────────
-ICD_URL = "https://raw.githubusercontent.com/ozlerhakan/mongodb-json-files/master/datasets/icd10.json"
+ICD_URL = "https://raw.githubusercontent.com/kamillamagna/icd10-data/main/icd10.json"
 
 print("⬇️ Downloading disease dataset from:", ICD_URL)
 resp = requests.get(ICD_URL)
