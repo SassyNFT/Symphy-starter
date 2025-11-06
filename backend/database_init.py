@@ -1,88 +1,155 @@
-import psycopg2
-import requests
-import json
-import os
-import time
+# backend/database_init.py
+import os, json, time, requests, psycopg2
+from urllib.parse import urlparse
 
-# === Database connection from Render environment variables ===
-DB_HOST = os.getenv("PGHOST")
-DB_NAME = os.getenv("PGDATABASE")
-DB_USER = os.getenv("PGUSER")
-DB_PASS = os.getenv("PGPASSWORD")
-DB_PORT = os.getenv("PGPORT", "5432")
+PG_DSN = os.environ.get("DATABASE_URL") or os.environ.get("DATABASE_URL_INTERNAL")
+LOCAL_PATH = os.environ.get("ICD_LOCAL_JSON", os.path.join(os.path.dirname(__file__), "data", "icd10_min.json"))
 
-# === Stable ICD-10 dataset mirrors ===
-PRIMARY_URL = "https://raw.githubusercontent.com/ozlerhakan/mongodb-json-files/master/datasets/icd10.json"
-BACKUP_URL = "https://raw.githubusercontent.com/dominicegginton/openicd-backup/main/icd10.json"
+REMOTE_SOURCES = [
+    # keep a few mirrors, but we'll only try them if LOCAL_PATH is missing
+    "https://raw.githubusercontent.com/ozlerhakan/mongodb-json-files/master/datasets/icd10.json",
+    "https://raw.githubusercontent.com/dominicegginton/openicd-backup/main/icd10.json",
+]
 
-# === Connect to Postgres ===
-try:
-    conn = psycopg2.connect(
-        host=DB_HOST,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS,
-        port=DB_PORT
+def slugify(s: str) -> str:
+    return "-".join("".join(ch.lower() if ch.isalnum() else "-" for ch in s).split("-")).strip("-")
+
+def connect():
+    if not PG_DSN:
+        raise RuntimeError("DATABASE_URL / DATABASE_URL_INTERNAL is not set")
+    # Render adds ?sslmode=require on external; psycopg2 handles it.
+    return psycopg2.connect(PG_DSN)
+
+def ensure_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS diseases (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT UNIQUE NOT NULL,
+          icd TEXT,
+          overview TEXT,
+          symptoms_common JSONB,
+          labs_key JSONB,
+          red_flags JSONB,
+          references JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """
     )
-    cur = conn.cursor()
-    print("✅ Connected to database.")
-except Exception as e:
-    raise RuntimeError(f"❌ Database connection failed: {e}")
 
-# === Create table for ICD data ===
-cur.execute("""
-CREATE TABLE IF NOT EXISTS diseases (
-    id SERIAL PRIMARY KEY,
-    code TEXT UNIQUE,
-    description TEXT,
-    category TEXT,
-    full_data JSONB
-);
-""")
-conn.commit()
-print("✅ Table created or already exists.")
-
-# === Function to download dataset with retries ===
-def download_icd_data(url):
-    for attempt in range(3):
-        try:
-            print(f"⬇️ Downloading disease dataset (attempt {attempt+1}) from: {url}")
-            resp = requests.get(url, timeout=15)
-            if resp.status_code == 200:
-                return resp.json()
-            else:
-                print(f"⚠️ Attempt {attempt+1} failed with status {resp.status_code}")
-        except Exception as e:
-            print(f"⚠️ Attempt {attempt+1} error: {e}")
-        time.sleep(2)
+def load_local():
+    if os.path.exists(LOCAL_PATH):
+        with open(LOCAL_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
     return None
 
-# === Try primary, then fallback ===
-data = download_icd_data(PRIMARY_URL)
-if not data:
-    print("⚠️ Primary source failed, trying backup...")
-    data = download_icd_data(BACKUP_URL)
-if not data:
-    raise RuntimeError("❌ Failed to download ICD data from all sources.")
+def load_remote(max_attempts=3, timeout=15):
+    session = requests.Session()
+    for url in REMOTE_SOURCES:
+        for attempt in range(1, max_attempts + 1):
+            print(f"⬇️  Downloading disease dataset (attempt {attempt}) from: {url}")
+            try:
+                r = session.get(url, timeout=timeout)
+                if r.status_code == 200:
+                    return r.json()
+                else:
+                    print(f"⚠️  Attempt {attempt} failed with status {r.status_code}")
+            except Exception as e:
+                print(f"⚠️  Attempt {attempt} error: {e}")
+            time.sleep(1.2)
+    raise RuntimeError("Failed to download ICD data from all sources.")
 
-# === Insert ICD data into Postgres ===
-inserted = 0
-for item in data:
-    code = item.get("code") or item.get("id") or "N/A"
-    desc = item.get("description") or item.get("desc") or "No description"
-    category = item.get("chapter") or "General"
-    try:
-        cur.execute("""
-            INSERT INTO diseases (code, description, category, full_data)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (code) DO NOTHING;
-        """, (code, desc, category, json.dumps(item)))
-        inserted += 1
-    except Exception as e:
-        print(f"⚠️ Skipped {code}: {e}")
+def normalize(records):
+    """
+    Accepts either our local schema (already normalized) or a bare list of ICD
+    {code, description}. Returns list of unified dicts matching DB columns.
+    """
+    norm = []
+    for rec in records:
+        # local schema already has fields
+        if "name" in rec:
+            name = rec["name"]
+            norm.append({
+                "name": name,
+                "slug": rec.get("slug") or slugify(name),
+                "icd": rec.get("icd"),
+                "overview": rec.get("overview", ""),
+                "symptoms_common": rec.get("symptoms_common", []),
+                "labs_key": rec.get("labs_key", []),
+                "red_flags": rec.get("red_flags", []),
+                "references": rec.get("references", []),
+            })
+        # generic fallback schema
+        elif "code" in rec and ("description" in rec or "desc" in rec):
+            code = rec["code"]
+            desc = rec.get("description") or rec.get("desc") or code
+            name = desc.split("—")[0].strip()
+            norm.append({
+                "name": name,
+                "slug": slugify(f"{name}-{code}"),
+                "icd": code,
+                "overview": desc,
+                "symptoms_common": [],
+                "labs_key": [],
+                "red_flags": [],
+                "references": [],
+            })
+    # de-dupe by slug
+    seen, out = set(), []
+    for r in norm:
+        if r["slug"] in seen: 
+            continue
+        seen.add(r["slug"])
+        out.append(r)
+    return out
 
-conn.commit()
-cur.close()
-conn.close()
-print(f"✅ Inserted {inserted} ICD entries successfully.")
-print("✅ Database initialization complete.")
+def upsert(cur, rows):
+    sql = """
+    INSERT INTO diseases (name, slug, icd, overview, symptoms_common, labs_key, red_flags, references)
+    VALUES (%(name)s, %(slug)s, %(icd)s, %(overview)s,
+            %(symptoms_common)s::jsonb, %(labs_key)s::jsonb, %(red_flags)s::jsonb, %(references)s::jsonb)
+    ON CONFLICT (slug) DO UPDATE SET
+      name = EXCLUDED.name,
+      icd = EXCLUDED.icd,
+      overview = EXCLUDED.overview,
+      symptoms_common = EXCLUDED.symptoms_common,
+      labs_key = EXCLUDED.labs_key,
+      red_flags = EXCLUDED.red_flags,
+      references = EXCLUDED.references;
+    """
+    for r in rows:
+        cur.execute(sql, {
+            "name": r["name"],
+            "slug": r["slug"],
+            "icd": r.get("icd"),
+            "overview": r.get("overview", ""),
+            "symptoms_common": json.dumps(r.get("symptoms_common", [])),
+            "labs_key": json.dumps(r.get("labs_key", [])),
+            "red_flags": json.dumps(r.get("red_flags", [])),
+            "references": json.dumps(r.get("references", [])),
+        })
+
+def main():
+    with connect() as conn:
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            ensure_table(cur)
+            conn.commit()
+            print("✅ Table created or already exists.")
+
+            data = load_local()
+            if data is None:
+                print("ℹ️  Local ICD JSON not found, trying remote mirrors...")
+                data = load_remote()
+            else:
+                print(f"📄 Loaded local ICD JSON: {LOCAL_PATH}")
+
+            rows = normalize(data)
+            print(f"📦 Normalized {len(rows)} disease rows.")
+            upsert(cur, rows)
+            conn.commit()
+            print("🎉 Seed complete.")
+
+if __name__ == "__main__":
+    main()
