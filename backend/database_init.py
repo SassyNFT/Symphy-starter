@@ -37,10 +37,10 @@ print("✅ Table created or already exists.")
 # Download and load WHO / ICD disease list
 # (small sample for testing first)
 # ─────────────────────────────────────────────
-ICD_URL = "https://raw.githubusercontent.com/datasets/infectious-diseases/main/data/diseases.json"
-print("⬇️ Downloading disease dataset from:", url)
+ICD_URL = "https://raw.githubusercontent.com/ozlerhakan/mongodb-json-files/master/datasets/icd10.json"
 
-resp = requests.get(url)
+print("⬇️ Downloading disease dataset from:", ICD_URL)
+resp = requests.get(ICD_URL)
 if resp.status_code != 200:
     raise RuntimeError(f"Failed to download ICD data: {resp.status_code}")
 data = resp.json()
