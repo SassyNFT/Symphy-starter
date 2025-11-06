@@ -1,21 +1,23 @@
 services:
-  # -------- API (FastAPI Docker Web Service) --------
+  # -------- Flask API Backend --------
   - type: web
     name: symphy-api
-    env: docker
-    rootDir: backend
-    dockerfilePath: Dockerfile   # <— FIX: relative to rootDir
+    env: python
     plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
     autoDeploy: true
-    healthCheckPath: /docs
+    healthCheckPath: /
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
 
-  # -------- Frontend (Static Site via Blueprint) --------
+  # -------- Frontend (Static Site via Vite/Node) --------
   - type: web
     name: symphy-web
     env: static
+    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
