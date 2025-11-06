@@ -26,7 +26,7 @@ def ensure_table(cur):
     print("✅ Table created or already exists.")
 
 def load_icd_data():
-    local_path = "backend/data/icd10_min.json"
+    local_path = os.path.join(os.path.dirname(__file__), "data", "icd10_min.json")
     if os.path.exists(local_path):
         print(f"📄 Loading local ICD dataset from: {local_path}")
         with open(local_path, "r", encoding="utf-8") as f:
