@@ -2,6 +2,7 @@ import psycopg2
 import requests
 import json
 import os
+import time
 
 # ✅ Database connection from Render environment variables
 DB_HOST = os.getenv("PGHOST")
@@ -10,8 +11,8 @@ DB_USER = os.getenv("PGUSER")
 DB_PASS = os.getenv("PGPASSWORD")
 DB_PORT = os.getenv("PGPORT", "5432")
 
-# ✅ Verified live ICD-10 dataset source
-ICD_URL = "https://raw.githubusercontent.com/open-data-icd/ICD-10-CM/main/icd10cm.json"
+# ✅ Stable ICD-10 dataset mirror (working source)
+ICD_URL = "https://raw.githubusercontent.com/dominicegginton/openicd/main/icd10.json"
 
 # ✅ Connect to Postgres
 try:
@@ -40,24 +41,29 @@ CREATE TABLE IF NOT EXISTS diseases (
 conn.commit()
 print("✅ Table created or already exists.")
 
-# ✅ Download ICD-10 dataset
-print("⬇️ Downloading disease dataset from:", ICD_URL)
-resp = requests.get(ICD_URL)
-
-if resp.status_code != 200:
-    raise RuntimeError(f"Failed to download ICD data: {resp.status_code}")
-
-try:
-    data = resp.json()
-except json.JSONDecodeError:
-    raise RuntimeError("❌ Invalid JSON data received from ICD source.")
+# ✅ Download ICD-10 dataset with retry logic
+for attempt in range(3):
+    try:
+        print(f"⬇️ Downloading disease dataset (attempt {attempt + 1}) from:", ICD_URL)
+        resp = requests.get(ICD_URL, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            break
+        else:
+            print(f"⚠️ Attempt {attempt + 1} failed with status {resp.status_code}")
+            time.sleep(2)
+    except Exception as e:
+        print(f"⚠️ Attempt {attempt + 1} error: {e}")
+        time.sleep(2)
+else:
+    raise RuntimeError("❌ Failed to download ICD data after 3 attempts.")
 
 # ✅ Insert ICD-10 codes into database
 inserted = 0
 for item in data:
     code = item.get("code")
-    desc = item.get("description") or item.get("desc") or "No description"
-    category = item.get("chapter") or item.get("category") or "General"
+    desc = item.get("description") or "No description"
+    category = item.get("chapter") or "General"
     try:
         cur.execute(
             """
