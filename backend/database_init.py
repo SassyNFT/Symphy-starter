@@ -2,29 +2,29 @@ import os
 import json
 import psycopg2
 
-# === Database Connection ===
 def connect():
     db_url = os.getenv("DATABASE_URL") or os.getenv("DATABASE_URL_INTERNAL")
     if not db_url:
         raise RuntimeError("DATABASE_URL / DATABASE_URL_INTERNAL is not set")
     return psycopg2.connect(db_url, sslmode="require")
 
-# === Ensure Table Exists ===
 def ensure_table(cur):
     cur.execute("""
     CREATE TABLE IF NOT EXISTS diseases (
         id SERIAL PRIMARY KEY,
-        code TEXT,
+        icd TEXT,
         name TEXT,
+        slug TEXT,
+        overview TEXT,
         category TEXT,
-        description TEXT,
         references_data JSONB,
-        symptoms JSONB
+        symptoms_common JSONB,
+        labs_key JSONB,
+        red_flags JSONB
     );
     """)
     print("✅ Table created or already exists.")
 
-# === Load ICD Data (local fallback) ===
 def load_icd_data():
     local_path = "backend/data/icd10_min.json"
     if os.path.exists(local_path):
@@ -37,7 +37,6 @@ def load_icd_data():
         print("⚠️ Local ICD dataset not found.")
         return []
 
-# === Insert Data ===
 def insert_data(cur, data):
     if not data:
         print("⚠️ No ICD data to insert.")
@@ -47,24 +46,29 @@ def insert_data(cur, data):
     for entry in data:
         try:
             cur.execute("""
-                INSERT INTO diseases (code, name, category, description, references_data, symptoms)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (code) DO NOTHING;
+                INSERT INTO diseases (
+                    icd, name, slug, overview, category, 
+                    references_data, symptoms_common, labs_key, red_flags
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (icd) DO NOTHING;
             """, (
-                entry.get("code"),
+                entry.get("icd"),
                 entry.get("name"),
+                entry.get("slug"),
+                entry.get("overview"),
                 entry.get("category"),
-                entry.get("description"),
                 json.dumps(entry.get("references", {})),
-                json.dumps(entry.get("symptoms", []))
+                json.dumps(entry.get("symptoms_common", [])),
+                json.dumps(entry.get("labs_key", [])),
+                json.dumps(entry.get("red_flags", []))
             ))
             inserted += 1
         except Exception as e:
-            print(f"⚠️ Skipping record {entry.get('code')}: {e}")
+            print(f"⚠️ Skipping record {entry.get('icd')}: {e}")
 
     print(f"✅ Inserted or verified {inserted} ICD records.")
 
-# === Main Routine ===
 def main():
     try:
         conn = connect()
