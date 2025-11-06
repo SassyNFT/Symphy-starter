@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS diseases (
     symptoms_common JSONB,
     labs_key JSONB,
     red_flags JSONB,
-    references JSONB
+    reference_data JSONB
 );
 """)
 
