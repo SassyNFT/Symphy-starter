@@ -1,14 +1,20 @@
-# --- Auto-import ICD-11 data on startup ---
+# --- ICD-11 Auto Import Section ---
 import os
+import threading
 
-if os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true":
+def start_icd_import():
     try:
         from auto_import_icd11 import run_auto_import
+        print("🚀 Starting ICD-11 import thread...")
         run_auto_import()
         print("✅ ICD-11 import executed successfully.")
     except Exception as e:
         print(f"⚠️ ICD-11 import skipped or failed: {e}")
-# --- End auto-import section ---
+
+# Only run importer if flag is enabled
+if os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true":
+    threading.Thread(target=start_icd_import, daemon=True).start()
+# --- End ICD-11 Auto Import Section ---
 
 from flask import Flask, jsonify
 import psycopg2
