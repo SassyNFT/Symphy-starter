@@ -1,8 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy import create_engine, text
+import os
 
+# ---------------------------
+# 🔹 APP SETUP
+# ---------------------------
 app = FastAPI(title="Symphy API", version="1.1.0")
 
 # ✅ Allow your live frontend domain to access the API
@@ -32,8 +37,18 @@ class AnalyzeInput(BaseModel):
     language: str = "en"
 
 # ---------------------------
+# 🔹 DATABASE CONNECTION
+# ---------------------------
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("❌ DATABASE_URL environment variable not set")
+
+engine = create_engine(DATABASE_URL)
+
+# ---------------------------
 # 🔹 ROUTES
 # ---------------------------
+
 @app.get("/")
 def root():
     return {"status": "Symphy API running successfully"}
@@ -81,3 +96,42 @@ def analyze(input_data: AnalyzeInput):
         ],
         "disclaimer": "This result is a demo and not medical advice."
     }
+
+# ---------------------------
+# 🔹 ICD-11 DATABASE ROUTES
+# ---------------------------
+
+@app.get("/diseases")
+def get_diseases(limit: int = Query(50, ge=1, le=500)):
+    """
+    Returns a list of ICD-11 diseases (limit 50 by default).
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT icd, name, slug, overview, symptoms_common, labs_key, red_flags, references
+                FROM diseases
+                LIMIT :limit
+            """), {"limit": limit})
+            diseases = [dict(row._mapping) for row in result]
+        return {"count": len(diseases), "data": diseases}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/search")
+def search_diseases(q: str = Query(..., description="Search by disease name or keyword")):
+    """
+    Search for diseases by name (case-insensitive).
+    """
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT icd, name, slug, overview, symptoms_common, labs_key, red_flags, references
+                FROM diseases
+                WHERE name ILIKE :term
+                LIMIT 25
+            """), {"term": f"%{q}%"})
+            diseases = [dict(row._mapping) for row in result]
+        return {"count": len(diseases), "data": diseases}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
