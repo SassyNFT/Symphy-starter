@@ -1,57 +1,91 @@
 import os
 import requests
 import psycopg2
-import time
+import json
 
 def run_auto_import():
-    client_id = os.getenv("WHO_CLIENT_ID")
-    client_secret = os.getenv("WHO_CLIENT_SECRET")
+    print("🌍 Starting ICD-11 auto import from WHO API...")
+
+    who_client_id = os.getenv("WHO_CLIENT_ID")
+    who_client_secret = os.getenv("WHO_CLIENT_SECRET")
     db_url = os.getenv("DATABASE_URL")
 
-    if not client_id or not client_secret:
-        print("❌ WHO_CLIENT_ID or WHO_CLIENT_SECRET missing from environment.")
+    if not who_client_id or not who_client_secret:
+        print("❌ WHO API credentials not found. Check environment variables.")
         return
+
     if not db_url:
-        print("❌ DATABASE_URL missing — cannot connect to DB.")
+        print("❌ DATABASE_URL missing.")
         return
 
-    print("✅ Environment variables detected. Starting WHO ICD-11 import...")
+    # Get access token from WHO
+    token_url = "https://icdaccessmanagement.who.int/connect/token"
+    token_data = {
+        "client_id": who_client_id,
+        "client_secret": who_client_secret,
+        "scope": "icdapi_access",
+        "grant_type": "client_credentials"
+    }
 
-    try:
-        # Authenticate
-        response = requests.post(
-            "https://icdaccessmanagement.who.int/connect/token",
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "scope": "icdapi_access",
-                "grant_type": "client_credentials",
-            },
+    print("🔑 Requesting WHO API token...")
+    token_response = requests.post(token_url, data=token_data)
+    if token_response.status_code != 200:
+        print("❌ Failed to get token:", token_response.text)
+        return
+
+    access_token = token_response.json().get("access_token")
+    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+
+    # Fetch ICD-11 foundation entities (limited for now)
+    icd_url = "https://id.who.int/icd/release/11/mms/foundation"
+    print("📡 Fetching ICD-11 data...")
+    response = requests.get(icd_url, headers=headers)
+
+    if response.status_code != 200:
+        print("❌ Failed to fetch ICD-11 data:", response.text)
+        return
+
+    data = response.json()
+    print(f"✅ Retrieved {len(data) if isinstance(data, list) else 1} ICD-11 entries (sample).")
+
+    # Connect to database
+    conn = psycopg2.connect(db_url)
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS diseases (
+            id SERIAL PRIMARY KEY,
+            icd TEXT,
+            name TEXT,
+            slug TEXT,
+            overview TEXT,
+            symptoms_common TEXT,
+            labs_key TEXT,
+            red_flags TEXT,
+            references TEXT
         )
-        if response.status_code != 200:
-            print(f"❌ WHO API auth failed: {response.text}")
-            return
+    """)
 
-        token = response.json().get("access_token")
-        print("🔑 WHO API authentication succeeded.")
+    # Insert example entries from ICD-11 data
+    if isinstance(data, list):
+        for item in data[:25]:
+            icd_code = item.get("id", "N/A")
+            name = item.get("title", {}).get("@value", "Unknown")
+            overview = json.dumps(item)
+            cur.execute("""
+                INSERT INTO diseases (icd, name, slug, overview)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+            """, (icd_code, name, name.lower().replace(" ", "-"), overview))
+    else:
+        print("⚠️ WHO API response format not list — storing single record.")
+        cur.execute("""
+            INSERT INTO diseases (icd, name, slug, overview)
+            VALUES (%s, %s, %s, %s)
+        """, ("ICD11", "WHO Root", "who-root", json.dumps(data)))
 
-        # Begin fetch loop
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        url = "https://id.who.int/icd/release/11/mms?flat=true&releaseId=2024-01&offset=0&limit=100"
-        print(f"📥 Fetching first batch: {url}")
-        res = requests.get(url, headers=headers)
-        print(f"HTTP {res.status_code}")
-        if res.status_code != 200:
-            print("❌ Fetch failed:", res.text)
-            return
+    conn.commit()
+    cur.close()
+    conn.close()
 
-        data = res.json()
-        total = len(data.get("destinationEntities", []))
-        print(f"✅ Retrieved {total} records in first batch.")
-        print("🎉 ICD-11 import test successful (initial fetch confirmed).")
-
-    except Exception as e:
-        print(f"❌ Fatal error in auto_import_icd11: {e}")
-
-if __name__ == "__main__":
-    run_auto_import()
+    print("🎉 ICD-11 import completed successfully.")
