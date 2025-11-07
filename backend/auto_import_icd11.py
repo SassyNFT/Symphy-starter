@@ -9,6 +9,7 @@ def run_auto_import():
     who_client_id = os.getenv("WHO_CLIENT_ID")
     who_client_secret = os.getenv("WHO_CLIENT_SECRET")
     db_url = os.getenv("DATABASE_URL")
+    print(f"🧪 DATABASE_URL = {db_url}")
 
     if not who_client_id or not who_client_secret:
         print("❌ WHO API credentials not found. Check environment variables.")
