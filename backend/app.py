@@ -4,7 +4,13 @@ import threading
 
 def start_icd_import():
     try:
-        from auto_import_icd11 import run_auto_import
+        try:
+            from auto_import_icd11 import run_auto_import
+            print("📦 auto_import_icd11 module found, preparing to run...")
+        except ModuleNotFoundError:
+            print("❌ auto_import_icd11.py not found — please add it to /backend/")
+            return
+
         print("🚀 Starting ICD-11 import thread...")
         run_auto_import()
         print("✅ ICD-11 import executed successfully.")
