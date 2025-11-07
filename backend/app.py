@@ -76,6 +76,12 @@ def get_diseases():
         conn.close()
 
 
+@app.before_first_request
+def trigger_icd_import():
+    if os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true":
+        threading.Thread(target=start_icd_import, daemon=True).start()
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
