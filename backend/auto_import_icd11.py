@@ -119,8 +119,8 @@ for root in root_entities:
     else:
         continue
 
-        all_items.append({"icd": icd_id, "name": name})
-        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+    all_items.append({"icd": icd_id, "name": name})
+    all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
 
     print(f"📦 Total ICD entities fetched: {len(all_items)}")
 
