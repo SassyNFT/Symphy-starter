@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 
 # WHO API endpoints
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
-WHO_API_BASE = "https://id.who.int/icd/entity"
+WHO_API_BASE = "https://id.who.int/icd/release/11/foundation"
 WHO_API_VERSION = "v2"  # required header per WHO ICD-11 API
 
 
@@ -43,7 +43,7 @@ def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
         "Accept-Language": "en",
         "API-Version": WHO_API_VERSION
     }
-    url = f"{WHO_API_BASE}/{entity_id}/children"
+    url = f"https://id.who.int/icd/entity/{entity_id}/children"
     r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
