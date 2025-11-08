@@ -1,70 +1,88 @@
 # backend/auto_import_icd11.py
-# Purpose: Fetch full ICD-11 hierarchy from WHO API and insert into PostgreSQL
+# Purpose: Traverse ICD-11 Foundation via WHO API and insert into PostgreSQL
 
 import os
 import time
 import requests
 from sqlalchemy import create_engine, text
 
-# WHO API endpoints
+# ---- WHO API endpoints ----
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
-WHO_API_BASE = "https://id.who.int/icd/release/11/foundation"
-WHO_API_VERSION = "v2"  # required header per WHO ICD-11 API
+# Foundation root (stable entry point to traverse full hierarchy)
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/foundation"
+WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
+API_VERSION = "v2"
 
-
-def get_token():
-    """Get a temporary access token from WHO using your environment credentials."""
-    client_id = os.getenv("WHO_CLIENT_ID")
-    client_secret = os.getenv("WHO_CLIENT_SECRET")
-
-    if not client_id or not client_secret:
-        raise RuntimeError("❌ Missing WHO_CLIENT_ID or WHO_CLIENT_SECRET in environment")
-
-    data = {
-        "grant_type": "client_credentials",
-        "scope": "icdapi_access"
+# ---- HTTP helpers ----
+def _headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Accept-Language": "en",
+        "API-Version": API_VERSION,
     }
 
+def get_token() -> str:
+    client_id = os.getenv("WHO_CLIENT_ID")
+    client_secret = os.getenv("WHO_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise RuntimeError("❌ Missing WHO_CLIENT_ID or WHO_CLIENT_SECRET in environment")
+    data = {"grant_type": "client_credentials", "scope": "icdapi_access"}
     print("🔑 Requesting WHO API token...")
     r = requests.post(WHO_TOKEN_URL, data=data, auth=(client_id, client_secret))
     if r.status_code != 200:
         raise RuntimeError(f"❌ Token request failed: {r.status_code} {r.text}")
-
-    token = r.json().get("access_token")
     print("✅ WHO API token received.")
-    return token
+    return r.json()["access_token"]
 
+def normalize_entity_id(child_entry) -> str | None:
+    """
+    The API returns child entries either as URIs (strings) or objects.
+    This returns the trailing numeric ID as a string.
+    """
+    if isinstance(child_entry, str):
+        # e.g., "http://id.who.int/icd/entity/1405434703"
+        return child_entry.rstrip("/").split("/")[-1]
+    if isinstance(child_entry, dict):
+        uri = child_entry.get("@id") or child_entry.get("id")
+        if uri:
+            return uri.rstrip("/").split("/")[-1]
+    return None
 
-def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
-    """Recursively fetch ICD-11 child entities."""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-        "Accept-Language": "en",
-        "API-Version": WHO_API_VERSION
-    }
-    url = f"https://id.who.int/icd/entity/{entity_id}/children"
-    r = requests.get(url, headers=headers)
+def get_entity(entity_id: str, token: str) -> dict | None:
+    url = f"{WHO_ENTITY_BASE}/{entity_id}"
+    r = requests.get(url, headers=_headers(token))
+    if r.status_code == 200:
+        return r.json()
+    # It’s common for a few IDs to be non-browseable in some releases
+    print(f"⚠️ Could not GET entity {entity_id}: {r.status_code} {r.text[:200]}")
+    return None
 
-    if r.status_code != 200:
-        print(f"⚠️ Could not fetch {entity_id}: {r.status_code} {r.text}")
+def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) -> list[dict]:
+    """
+    Recursively fetch entity -> child list -> recurse.
+    We don't use '/children' endpoint; we read 'child' from the entity itself.
+    """
+    if depth > max_depth:
         return []
 
-    data = r.json()
-    entities = []
+    ent = get_entity(entity_id, token)
+    if not ent:
+        return []
 
-    for child in data.get("destinationEntities", []):
-        icd_id = child.get("@id", "").split("/")[-1]
-        title = child.get("title", {}).get("@value", "Unknown name")
-        entities.append({"icd": icd_id, "name": title})
+    out = []
+    title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
+    out.append({"icd": entity_id, "name": title})
 
-        # Recursively go deeper (but limited)
-        if depth < max_depth:
-            time.sleep(0.3)
-            entities.extend(fetch_icd_children(icd_id, token, depth + 1, max_depth))
-
-    return entities
-
+    children = ent.get("child", []) or []
+    for child in children:
+        cid = normalize_entity_id(child)
+        if not cid:
+            continue
+        # brief backoff to be gentle with the API
+        time.sleep(0.15)
+        out.extend(traverse_children(cid, token, depth + 1, max_depth))
+    return out
 
 def run_auto_import():
     print("🔗 Connecting to database...")
@@ -74,7 +92,7 @@ def run_auto_import():
 
     engine = create_engine(db_url)
 
-    # Create or reset table
+    # Recreate table
     with engine.begin() as conn:
         conn.execute(text("""
             DROP TABLE IF EXISTS diseases;
@@ -91,53 +109,44 @@ def run_auto_import():
         """))
     print("✅ Table 'diseases' ready.")
 
-    # Get token and fetch root data
     token = get_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-        "Accept-Language": "en",
-        "API-Version": WHO_API_VERSION
-    }
 
-    print("🌍 Fetching ICD-11 root entities...")
-    r = requests.get(WHO_API_BASE, headers=headers)
+    # 1) Get Foundation root and its top-level 'child' list
+    print("🌍 Fetching ICD-11 Foundation root...")
+    r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token))
     if r.status_code != 200:
-        raise RuntimeError(f"❌ Failed to fetch root: {r.status_code} {r.text}")
+        raise RuntimeError(f"❌ Failed to fetch Foundation root: {r.status_code} {r.text[:200]}")
 
-    root_entities = r.json().get("child", [])
-    print(f"✅ Found {len(root_entities)} top-level categories")
+    root = r.json()
+    roots = root.get("child", []) or []
+    print(f"✅ Found {len(roots)} top-level entities")
 
-    all_items = []
-    for root in root_entities:
-        if isinstance(root, str):
-            # WHO sometimes returns entity URIs directly (strings)
-            icd_id = root.split("/")[-1]
-            name = icd_id  # placeholder, will fetch proper name below
-        elif isinstance(root, dict):
-            icd_id = root.get("@id", "").split("/")[-1]
-            name = root.get("title", {}).get("@value", "Unknown")
-        else:
+    # 2) Walk N levels down from each top-level entity
+    all_items: list[dict] = []
+    MAX_DEPTH = int(os.getenv("ICD_DEPTH", "2"))  # allow override
+
+    for entry in roots:
+        rid = normalize_entity_id(entry)
+        if not rid:
             continue
+        # small delay between top-level traversals
+        time.sleep(0.2)
+        all_items.extend(traverse_children(rid, token, depth=0, max_depth=MAX_DEPTH))
 
-        all_items.append({"icd": icd_id, "name": name})
-        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+    print(f"📦 Total ICD entities collected: {len(all_items)}")
 
-    print(f"📦 Total ICD entities fetched: {len(all_items)}")
-
-    # Insert into DB
+    # 3) Insert
     with engine.begin() as conn:
         for e in all_items:
             conn.execute(
                 text("""
                     INSERT INTO diseases (icd, name, overview)
-                    VALUES (:icd, :name, 'Imported from WHO ICD-11 API');
+                    VALUES (:icd, :name, 'Imported from WHO ICD-11 (Foundation)');
                 """),
-                {"icd": e["icd"], "name": e["name"]}
+                {"icd": e["icd"], "name": e["name"]},
             )
 
     print("✅ Full ICD-11 import complete.")
-
 
 if __name__ == "__main__":
     print("🚀 auto_import_icd11.py started...")
