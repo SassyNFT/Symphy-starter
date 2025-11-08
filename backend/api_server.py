@@ -170,21 +170,33 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
 # ---------------------------
 # 🔹 SYSTEM STATUS ENDPOINT
 # ---------------------------
+from sqlalchemy import text
+import os
+
 @app.get("/status")
-def status():
-    """Returns system health and ICD-11 data count."""
+def get_status():
     try:
+        # Connect to DB engine already created
         with engine.connect() as conn:
-            count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+            result = conn.execute(text("SELECT COUNT(*) FROM diseases;"))
+            count = result.scalar() or 0
+
+        # Mask DB URL for debug (safe to print)
+        db_url = os.getenv("DATABASE_URL", "")
+        masked_db = db_url[:25] + "..." + db_url[-10:] if db_url else "None"
+        print(f"🔍 API Server using DB: {masked_db}, found {count} rows")
+
         return {
             "status": "ok",
             "icd_diseases_loaded": count,
             "database_url": "connected",
             "version": "1.2.0"
         }
+
     except Exception as e:
+        print(f"❌ /status DB check failed: {e}")
         return {
             "status": "error",
-            "message": str(e),
-            "icd_diseases_loaded": 0
+            "icd_diseases_loaded": 0,
+            "error": str(e)
         }
