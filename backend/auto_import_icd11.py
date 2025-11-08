@@ -109,10 +109,18 @@ def run_auto_import():
 
     all_items = []
     for root in root_entities:
+    if isinstance(root, str):
+        # WHO now often returns entity URIs directly (strings)
+        icd_id = root.split("/")[-1]
+        name = icd_id  # placeholder, will fetch proper name below
+    elif isinstance(root, dict):
         icd_id = root.get("@id", "").split("/")[-1]
         name = root.get("title", {}).get("@value", "Unknown")
-        all_items.append({"icd": icd_id, "name": name})
-        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+    else:
+        continue
+
+    all_items.append({"icd": icd_id, "name": name})
+    all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
 
     print(f"📦 Total ICD entities fetched: {len(all_items)}")
 
