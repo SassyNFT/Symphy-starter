@@ -6,8 +6,9 @@ import time
 import requests
 from sqlalchemy import create_engine, text
 
+# WHO API endpoints
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
-WHO_API_BASE = "https://id.who.int/icd/entity"
+WHO_API_BASE = "https://id.who.int/icd/release/11/mms"
 
 def get_token():
     """Get a temporary access token from WHO using your environment credentials."""
@@ -83,16 +84,16 @@ def run_auto_import():
         """))
     print("✅ Table 'diseases' ready.")
 
-    # Get token and root data
+    # Get token and fetch root data
     token = get_token()
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
     print("🌍 Fetching ICD-11 root entities...")
-    r = requests.get(f"{WHO_API_BASE}/root/children", headers=headers)
+    r = requests.get(WHO_API_BASE, headers=headers)
     if r.status_code != 200:
         raise RuntimeError(f"❌ Failed to fetch root: {r.status_code} {r.text}")
 
-    root_entities = r.json().get("destinationEntities", [])
+    root_entities = r.json().get("child", [])
     print(f"✅ Found {len(root_entities)} top-level categories")
 
     all_items = []
