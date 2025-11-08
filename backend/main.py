@@ -1,34 +1,24 @@
+# backend/main.py
+# Purpose: Run ICD-11 auto-import into PostgreSQL once on startup.
+
 import os
-import threading
-import traceback
-from fastapi import FastAPI
+import time
+from database_init import init_database
+from auto_import_icd11 import run_auto_import
 
-app = FastAPI(title="Symphy Starter Worker")
+def main():
+    print("🔗 Connecting to database...")
+    init_database()
 
-def _do_import():
-    try:
-        from database_init import init_db
-        init_db()
-        from auto_import_icd11 import run_auto_import
-        run_auto_import()
-        print("✅ ICD-11 import finished.")
-    except Exception as e:
-        print("❌ ICD-11 import failed:")
-        print(e)
-        print(traceback.format_exc())
+    print("🌍 Starting ICD-11 auto-import...")
+    run_auto_import()
+    print("✅ Import complete.")
 
-@app.on_event("startup")
-def _startup():
-    run_flag = os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true"
-    if run_flag:
-        print("🚀 Launching ICD-11 import thread...")
-        threading.Thread(target=_do_import, daemon=True).start()
-    else:
-        print("⏭️ RUN_AUTO_IMPORT is false — skipping import.")
+    # optional keep-alive so Render doesn't stop the worker
+    if os.getenv("KEEP_RUNNING", "false").lower() == "true":
+        print("🕒 Keeping worker alive for monitoring...")
+        while True:
+            time.sleep(3600)
 
-@app.get("/")
-def health():
-    return {
-        "status": "ICD-11 importer running",
-        "RUN_AUTO_IMPORT": os.getenv("RUN_AUTO_IMPORT", "true")
-    }
+if __name__ == "__main__":
+    main()
