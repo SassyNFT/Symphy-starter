@@ -1,84 +1,118 @@
 # backend/auto_import_icd11.py
+# Purpose: Fetch full ICD-11 hierarchy from WHO API and insert into PostgreSQL
+
 import os
-import psycopg2
+import time
 import requests
-from psycopg2.extras import execute_batch
+from sqlalchemy import create_engine, text
 
-def run_auto_import():
-    db_url = os.getenv("DATABASE_URL")
-    who_key = os.getenv("WHO_API_KEY")
+WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
+WHO_API_BASE = "https://id.who.int/icd/entity"
 
-    if not db_url:
-        print("❌ DATABASE_URL not set"); return
-    if not who_key:
-        print("❌ WHO_API_KEY not set"); return
+def get_token():
+    """Get a temporary access token from WHO using your environment credentials."""
+    client_id = os.getenv("WHO_CLIENT_ID")
+    client_secret = os.getenv("WHO_CLIENT_SECRET")
 
-    # Mask DB URL for logs (show first 20 chars + last 10)
-    masked_db = db_url[:20] + "..." + db_url[-10:] if db_url else "None"
-    print(f"🔌 DB URL (masked): {masked_db}")
+    if not client_id or not client_secret:
+        raise RuntimeError("❌ Missing WHO_CLIENT_ID or WHO_CLIENT_SECRET in environment")
 
-    print("🌍 Connecting to WHO ICD-11 API...")
-    headers = {
-        "Authorization": f"Bearer {who_key}",
-        "Accept": "application/json",
-        "Accept-Language": "en",
-        "API-Version": "v2"
+    data = {
+        "grant_type": "client_credentials",
+        "scope": "icdapi_access"
     }
 
-    # Fetch root entity
-    url = "https://id.who.int/icd/entity"
-    r = requests.get(url, headers=headers, timeout=20)
-    print("WHO root status:", r.status_code)
+    print("🔑 Requesting WHO API token...")
+    r = requests.post(WHO_TOKEN_URL, data=data, auth=(client_id, client_secret))
+    if r.status_code != 200:
+        raise RuntimeError(f"❌ Token request failed: {r.status_code} {r.text}")
+
+    token = r.json().get("access_token")
+    print("✅ WHO API token received.")
+    return token
+
+
+def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
+    """Recursively fetch ICD-11 child entities."""
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    url = f"{WHO_API_BASE}/{entity_id}/children"
+    r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
-        print("❌ WHO API error:", r.text[:300]); return
+        print(f"⚠️ Could not fetch {entity_id}: {r.status_code}")
+        return []
 
     data = r.json()
-    children_uris = data.get("child", [])
-    print("Root children found:", len(children_uris))
-
-    if not children_uris:
-        print("⚠️ No children. Key/permissions may be wrong."); return
-
-    # Fetch details for first 20 children
     entities = []
-    for uri in children_uris[:20]:
-        r_child = requests.get(uri, headers=headers, timeout=20)
-        if r_child.status_code == 200:
-            e_data = r_child.json()
-            entities.append(e_data)
-        else:
-            print(f"⚠️ Failed to fetch {uri}: {r_child.status_code}")
 
-    print("Entities fetched:", len(entities))
+    for child in data.get("destinationEntities", []):
+        icd_id = child.get("@id", "").split("/")[-1]
+        title = child.get("title", {}).get("@value", "Unknown name")
+        entities.append({"icd": icd_id, "name": title})
 
-    rows = []
-    for e in entities:
-        icd = e.get("@id", "").split('/')[-1]  # Entity ID number
-        name = e.get("title", {}).get("@value", "Unknown")
-        slug = name.lower().replace(" ", "-") if name else "unknown"
-        overview = e.get("definition", {}).get("@value", "") if e.get("definition") else ""
-        rows.append((icd, name, slug, overview, "N/A", "N/A", "N/A", "WHO"))
+        # Recursively go deeper (but limited)
+        if depth < max_depth:
+            time.sleep(0.3)
+            entities.extend(fetch_icd_children(icd_id, token, depth + 1, max_depth))
 
-    print("Preparing to insert:", len(rows))
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor()
-    try:
-        execute_batch(cur, """
-            INSERT INTO diseases (icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (icd) DO NOTHING;
-        """, rows)
-        conn.commit()
-        cur.execute("SELECT COUNT(*) FROM diseases;")
-        count = cur.fetchone()[0]
-        print("📊 Diseases in DB now:", count)
-    except Exception as e:
-        print("❌ Insert failed:", e)
-    finally:
-        cur.close()
-        conn.close()
-        print("🏁 Import done.")
+    return entities
 
-if __name__ == "__main__":
-    run_auto_import()
+
+def run_auto_import():
+    print("🔗 Connecting to database...")
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("❌ DATABASE_URL missing")
+
+    engine = create_engine(db_url)
+
+    # Create or reset table
+    with engine.begin() as conn:
+        conn.execute(text("""
+            DROP TABLE IF EXISTS diseases;
+            CREATE TABLE diseases (
+                id SERIAL PRIMARY KEY,
+                icd TEXT,
+                name TEXT,
+                overview TEXT,
+                symptoms_common TEXT,
+                labs_key TEXT,
+                red_flags TEXT,
+                "references" TEXT
+            );
+        """))
+    print("✅ Table 'diseases' ready.")
+
+    # Get token and root data
+    token = get_token()
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    print("🌍 Fetching ICD-11 root entities...")
+    r = requests.get(f"{WHO_API_BASE}/root/children", headers=headers)
+    if r.status_code != 200:
+        raise RuntimeError(f"❌ Failed to fetch root: {r.status_code} {r.text}")
+
+    root_entities = r.json().get("destinationEntities", [])
+    print(f"✅ Found {len(root_entities)} top-level categories")
+
+    all_items = []
+    for root in root_entities:
+        icd_id = root.get("@id", "").split("/")[-1]
+        name = root.get("title", {}).get("@value", "Unknown")
+        all_items.append({"icd": icd_id, "name": name})
+        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+
+    print(f"📦 Total ICD entities fetched: {len(all_items)}")
+
+    # Insert into DB
+    with engine.begin() as conn:
+        for e in all_items:
+            conn.execute(
+                text("""
+                    INSERT INTO diseases (icd, name, overview)
+                    VALUES (:icd, :name, 'Imported from WHO ICD-11 API');
+                """),
+                {"icd": e["icd"], "name": e["name"]}
+            )
+
+    print("✅ Full ICD-11 import complete.")
