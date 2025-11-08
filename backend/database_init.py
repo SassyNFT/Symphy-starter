@@ -21,8 +21,10 @@ def init_database():
             name TEXT,
             slug TEXT,
             overview TEXT,
-            category TEXT,
-            data JSONB
+            symptoms_common TEXT,
+            labs_key TEXT,
+            red_flags TEXT,
+            "references" TEXT
         );
     """)
 
