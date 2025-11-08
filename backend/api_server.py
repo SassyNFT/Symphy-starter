@@ -141,3 +141,24 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# ---------------------------
+# 🔹 SYSTEM STATUS ENDPOINT
+# ---------------------------
+@app.get("/status")
+def status():
+    """Returns system health and ICD-11 data count."""
+    try:
+        with engine.connect() as conn:
+            count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+        return {
+            "status": "ok",
+            "icd_diseases_loaded": count,
+            "database_url": "connected",
+            "version": "1.2.0"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "icd_diseases_loaded": 0
+        }
