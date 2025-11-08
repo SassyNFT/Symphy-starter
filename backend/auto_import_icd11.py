@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 # WHO API endpoints
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_BASE = "https://id.who.int/icd/release/11/mms"
+WHO_API_VERSION = "2023-05"  # required header per WHO ICD-11 API
 
 def get_token():
     """Get a temporary access token from WHO using your environment credentials."""
@@ -35,12 +36,16 @@ def get_token():
 
 def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
     """Recursively fetch ICD-11 child entities."""
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "API-Version": WHO_API_VERSION
+    }
     url = f"{WHO_API_BASE}/{entity_id}/children"
     r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
-        print(f"⚠️ Could not fetch {entity_id}: {r.status_code}")
+        print(f"⚠️ Could not fetch {entity_id}: {r.status_code} {r.text}")
         return []
 
     data = r.json()
@@ -86,7 +91,11 @@ def run_auto_import():
 
     # Get token and fetch root data
     token = get_token()
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "API-Version": WHO_API_VERSION
+    }
 
     print("🌍 Fetching ICD-11 root entities...")
     r = requests.get(WHO_API_BASE, headers=headers)
