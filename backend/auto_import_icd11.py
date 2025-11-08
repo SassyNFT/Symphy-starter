@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 
 # WHO API endpoints
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
-WHO_API_BASE = "https://id.who.int/icd/release/11/mms/2024-01"
+WHO_API_BASE = "https://id.who.int/icd/entity"
 WHO_API_VERSION = "v2"  # required header per WHO ICD-11 API
 
 def get_token():
