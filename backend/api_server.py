@@ -22,32 +22,6 @@ app.add_middleware(
     allow_credentials=False,
 )
 
-import os
-import threading
-import traceback
-from database_init import init_database
-from auto_import_icd11 import run_auto_import
-
-def _do_import():
-    try:
-        try:
-            print("running init_database()...")
-            init_database()
-        except Exception as e:
-            print(f"init_database skipped/failed: {e}")
-
-        print("running run_auto_import() ...")
-        run_auto_import()
-        print("import finished.")
-    except Exception as e:
-        print("import failed:", e, traceback.format_exc())
-
-@app.on_event("startup")
-def _startup():
-    run_flag = os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true"
-    if run_flag:
-        threading.Thread(target=_do_import, daemon=True).start()
-        
 # ---------------------------
 # 🔹 DATABASE CONNECTION
 # ---------------------------
@@ -89,10 +63,10 @@ def analyze(input_data: AnalyzeInput):
     """
     Basic mock analyzer. You can later connect this to your AI logic.
     """
-    text = input_data.symptoms_free_text.lower()
+    text_lower = input_data.symptoms_free_text.lower()
 
     # Example rule: tooth pain
-    if "tooth" in text or "gum" in text:
+    if "tooth" in text_lower or "gum" in text_lower:
         return {
             "needs_more_data": False,
             "error": None,
@@ -167,12 +141,10 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 # ---------------------------
 # 🔹 SYSTEM STATUS ENDPOINT
 # ---------------------------
-from sqlalchemy import text
-import os
-
 @app.get("/status")
 def get_status():
     try:
