@@ -128,3 +128,7 @@ def run_auto_import():
             )
 
     print("✅ Full ICD-11 import complete.")
+
+if __name__ == "__main__":
+    print("🚀 auto_import_icd11.py started...")
+    run_auto_import()
