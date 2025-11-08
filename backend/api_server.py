@@ -22,6 +22,32 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+import os
+import threading
+import traceback
+from database_init import init_database
+from auto_import_icd11 import run_auto_import
+
+def _do_import():
+    try:
+        try:
+            print("running init_database()...")
+            init_database()
+        except Exception as e:
+            print(f"init_database skipped/failed: {e}")
+
+        print("running run_auto_import() ...")
+        run_auto_import()
+        print("import finished.")
+    except Exception as e:
+        print("import failed:", e, traceback.format_exc())
+
+@app.on_event("startup")
+def _startup():
+    run_flag = os.getenv("RUN_AUTO_IMPORT", "true").lower() == "true"
+    if run_flag:
+        threading.Thread(target=_do_import, daemon=True).start()
+        
 # ---------------------------
 # 🔹 DATABASE CONNECTION
 # ---------------------------
