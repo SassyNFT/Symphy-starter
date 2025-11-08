@@ -108,7 +108,7 @@ def run_auto_import():
     print(f"✅ Found {len(root_entities)} top-level categories")
 
     all_items = []
-    for root in root_entities:
+for root in root_entities:
     if isinstance(root, str):
         # WHO now often returns entity URIs directly (strings)
         icd_id = root.split("/")[-1]
@@ -119,8 +119,8 @@ def run_auto_import():
     else:
         continue
 
-    all_items.append({"icd": icd_id, "name": name})
-    all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+        all_items.append({"icd": icd_id, "name": name})
+        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
 
     print(f"📦 Total ICD entities fetched: {len(all_items)}")
 
