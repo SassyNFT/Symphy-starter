@@ -40,7 +40,7 @@ def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
     "Authorization": f"Bearer {token}",
     "Accept": "application/json",
     "Accept-Language": "en",
-    "API-Version": WHO_API_VERSION
+    "API-Version": "v2"
 }
     url = f"{WHO_API_BASE}/{entity_id}/children"
     r = requests.get(url, headers=headers)
@@ -96,7 +96,7 @@ def run_auto_import():
     "Authorization": f"Bearer {token}",
     "Accept": "application/json",
     "Accept-Language": "en",
-    "API-Version": WHO_API_VERSION
+    "API-Version": "v2"
 }
 
     print("🌍 Fetching ICD-11 root entities...")
