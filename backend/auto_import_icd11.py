@@ -11,6 +11,7 @@ WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_BASE = "https://id.who.int/icd/entity"
 WHO_API_VERSION = "v2"  # required header per WHO ICD-11 API
 
+
 def get_token():
     """Get a temporary access token from WHO using your environment credentials."""
     client_id = os.getenv("WHO_CLIENT_ID")
@@ -37,11 +38,11 @@ def get_token():
 def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
     """Recursively fetch ICD-11 child entities."""
     headers = {
-    "Authorization": f"Bearer {token}",
-    "Accept": "application/json",
-    "Accept-Language": "en",
-    "API-Version": "v2"
-}
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Accept-Language": "en",
+        "API-Version": WHO_API_VERSION
+    }
     url = f"{WHO_API_BASE}/{entity_id}/children"
     r = requests.get(url, headers=headers)
 
@@ -93,11 +94,11 @@ def run_auto_import():
     # Get token and fetch root data
     token = get_token()
     headers = {
-    "Authorization": f"Bearer {token}",
-    "Accept": "application/json",
-    "Accept-Language": "en",
-    "API-Version": "v2"
-}
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Accept-Language": "en",
+        "API-Version": WHO_API_VERSION
+    }
 
     print("🌍 Fetching ICD-11 root entities...")
     r = requests.get(WHO_API_BASE, headers=headers)
@@ -108,19 +109,19 @@ def run_auto_import():
     print(f"✅ Found {len(root_entities)} top-level categories")
 
     all_items = []
-for root in root_entities:
-    if isinstance(root, str):
-        # WHO now often returns entity URIs directly (strings)
-        icd_id = root.split("/")[-1]
-        name = icd_id  # placeholder, will fetch proper name below
-    elif isinstance(root, dict):
-        icd_id = root.get("@id", "").split("/")[-1]
-        name = root.get("title", {}).get("@value", "Unknown")
-    else:
-        continue
+    for root in root_entities:
+        if isinstance(root, str):
+            # WHO sometimes returns entity URIs directly (strings)
+            icd_id = root.split("/")[-1]
+            name = icd_id  # placeholder, will fetch proper name below
+        elif isinstance(root, dict):
+            icd_id = root.get("@id", "").split("/")[-1]
+            name = root.get("title", {}).get("@value", "Unknown")
+        else:
+            continue
 
-    all_items.append({"icd": icd_id, "name": name})
-    all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
+        all_items.append({"icd": icd_id, "name": name})
+        all_items.extend(fetch_icd_children(icd_id, token, max_depth=2))
 
     print(f"📦 Total ICD entities fetched: {len(all_items)}")
 
@@ -136,6 +137,7 @@ for root in root_entities:
             )
 
     print("✅ Full ICD-11 import complete.")
+
 
 if __name__ == "__main__":
     print("🚀 auto_import_icd11.py started...")
