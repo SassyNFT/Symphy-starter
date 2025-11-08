@@ -103,7 +103,8 @@ def run_auto_import():
             conn.execute(
                 text("""
                     INSERT INTO diseases
-                    (icd, name, slug, overview, symptoms_common, labs_key, red_flags, references)
+                    INSERT INTO diseases
+(icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
                     VALUES
                     (:icd, :name, :slug, :overview, :symptoms_common, :labs_key, :red_flags, :references)
                 """),
