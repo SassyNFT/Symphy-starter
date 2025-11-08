@@ -37,10 +37,11 @@ def get_token():
 def fetch_icd_children(entity_id, token, depth=0, max_depth=2):
     """Recursively fetch ICD-11 child entities."""
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-        "API-Version": WHO_API_VERSION
-    }
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
+    "Accept-Language": "en",
+    "API-Version": WHO_API_VERSION
+}
     url = f"{WHO_API_BASE}/{entity_id}/children"
     r = requests.get(url, headers=headers)
 
@@ -92,10 +93,11 @@ def run_auto_import():
     # Get token and fetch root data
     token = get_token()
     headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-        "API-Version": WHO_API_VERSION
-    }
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
+    "Accept-Language": "en",
+    "API-Version": WHO_API_VERSION
+}
 
     print("🌍 Fetching ICD-11 root entities...")
     r = requests.get(WHO_API_BASE, headers=headers)
