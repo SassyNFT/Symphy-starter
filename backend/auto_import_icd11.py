@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/2025-01/mms/root"
 
 # ---- HTTP helpers ----
 def _headers(token: str) -> dict:
