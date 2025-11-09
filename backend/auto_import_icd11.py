@@ -19,7 +19,7 @@ def _headers(token: str) -> dict:
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Accept-Language": "en",
-        "API-Version": "WHO_API_VERSION"
+        "API-Version": "v2"
     }
 
 def get_token() -> str:
