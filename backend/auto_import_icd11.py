@@ -10,7 +10,7 @@ from sqlalchemy import create_engine, text
 # WHO ICD-11 constants (Nov 2025)
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
-WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/2025-09/mms/root"
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/entity"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
 
 # ---- HTTP helpers ----
