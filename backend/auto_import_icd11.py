@@ -52,6 +52,7 @@ def normalize_entity_id(child_entry) -> str | None:
 def get_entity(entity_id: str, token: str) -> dict | None:
     url = f"{WHO_ENTITY_BASE}/{entity_id}"
     r = requests.get(url, headers=_headers(token))
+    print(f"Requesting: {r.url}")
     if r.status_code == 200:
         return r.json()
     # It’s common for a few IDs to be non-browseable in some releases
