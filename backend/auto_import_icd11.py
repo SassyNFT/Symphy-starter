@@ -5,7 +5,18 @@ import os
 import time
 import requests
 from sqlalchemy import create_engine, text
+import requests, certifi
 
+print("🔍 Testing WHO ICD URL connectivity...")
+print("CA bundle path:", certifi.where())
+
+try:
+    r = requests.get("https://icd.who.int/ct/icd11_mms/en/release", verify=certifi.where())
+    print("WHO ICD status:", r.status_code)
+    print("WHO ICD content preview:", r.text[:200])
+except Exception as e:
+    print("❌ WHO ICD test failed:", e)
+    
 # ---- WHO API endpoints ----
 # WHO ICD-11 constants (Nov 2025)
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
