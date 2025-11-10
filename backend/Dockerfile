@@ -2,27 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy dependency file
 COPY requirements.txt .
 
-# ✅ Install and refresh SSL certificate authorities
+# ✅ Install system dependencies & force CA refresh
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl openssl && \
-    update-ca-certificates && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl openssl gnupg && \
+    update-ca-certificates --fresh && \
     rm -rf /var/lib/apt/lists/*
 
-# ✅ Ensure Python’s certifi store is updated
+# ✅ Upgrade pip + certifi + explicitly point OpenSSL to Python’s CA
 RUN python -m pip install --upgrade pip certifi && \
-    python -m certifi > /etc/ssl/certs/ca-certificates.crt
+    ln -sf $(python -m certifi) /etc/ssl/certs/ca-certificates.crt
 
-# Install project dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all project files
+# Copy project files
 COPY . .
 
-# Expose port (if your app uses one)
-EXPOSE 8000
+# ✅ Healthcheck (optional)
+HEALTHCHECK CMD python -c "import requests, certifi; print(requests.get('https://icd.who.int/ct/icd11_mms/en/release', verify=certifi.where()).status_code)" || exit 1
 
-# Start the app
-CMD ["python", "backend/main.py"]
+CMD ["python", "auto_import_icd11.py"]
