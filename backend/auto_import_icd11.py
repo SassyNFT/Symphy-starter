@@ -19,7 +19,7 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
-WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # UPDATED: Current MMS root (2025 edition)
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # Multi-version root for MMS
 
 # ---- HTTP helpers ----
 def _headers(token: str) -> dict:
@@ -131,17 +131,31 @@ def run_auto_import():
     except Exception as e:
         print("❌ WHO ICD test failed:", e)
 
-    # 1) Get MMS root and its top-level 'child' list
-    print("🌍 Fetching ICD-11 MMS root...")
+    # 1) Get MMS multi-version root
+    print("🌍 Fetching ICD-11 MMS multi-version root...")
     r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
     if r.status_code != 200:
         raise RuntimeError(f"❌ Failed to fetch MMS root: {r.status_code} {r.text[:200]}")
 
-    root = r.json()
-    roots = root.get("child", []) or []
+    multi_root = r.json()
+
+    # Extract latest version URL
+    latest_url = multi_root.get("latestVersion") or multi_root.get("latestRelease") or multi_root.get("version", [None])[0]
+    if not latest_url:
+        raise RuntimeError("❌ No latest version found in multi-version root")
+
+    print(f"📌 Using latest version: {latest_url}")
+
+    # 2) Fetch the specific version root, which has the 'child' list
+    r = requests.get(latest_url, headers=_headers(token), verify=False)
+    if r.status_code != 200:
+        raise RuntimeError(f"❌ Failed to fetch latest MMS version: {r.status_code} {r.text[:200]}")
+
+    version_root = r.json()
+    roots = version_root.get("child", []) or []
     print(f"✅ Found {len(roots)} top-level entities")
 
-    # 2) Walk N levels down from each top-level entity
+    # 3) Walk N levels down from each top-level entity
     all_items: list[dict] = []
     MAX_DEPTH = int(os.getenv("ICD_DEPTH", "2"))  # allow override
 
@@ -155,7 +169,7 @@ def run_auto_import():
 
     print(f"📦 Total ICD entities collected: {len(all_items)}")
 
-    # 3) Insert
+    # 4) Insert
     with engine.begin() as conn:
         for e in all_items:
             conn.execute(
