@@ -6,7 +6,7 @@ import time
 import requests
 from sqlalchemy import create_engine, text
 import certifi
-import urllib3  # Added for warning suppression
+import urllib3  # For warning suppression
 
 # Suppress InsecureRequestWarning from verify=False (for this trusted API)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -14,22 +14,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
-print("🔍 Testing WHO ICD URL connectivity...")
-print("CA bundle path:", certifi.where())
-
-try:
-    r = requests.get("https://id.who.int/icd/release/11/mms", verify=False)  # Updated test URL to match new root
-    print("WHO ICD status:", r.status_code)
-    print("WHO ICD content preview:", r.text[:200])
-except Exception as e:
-    print("❌ WHO ICD test failed:", e)
-    
 # ---- WHO API endpoints ----
 # WHO ICD-11 constants (Nov 2025)
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
-WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # UPDATED: Correct JSON API endpoint for MMS root
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/2025-01/mms"  # UPDATED: Specific release for 2025 MMS root
 
 # ---- HTTP helpers ----
 def _headers(token: str) -> dict:
@@ -91,7 +81,8 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) ->
 
     out = []
     title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
-    out.append({"icd": entity_id, "name": title})
+    definition = (ent.get("definition") or {}).get("@value") or ""  # ADDED: Extract definition for overview
+    out.append({"icd": entity_id, "name": title, "overview": definition})
 
     children = ent.get("child", []) or []
     for child in children:
@@ -130,11 +121,21 @@ def run_auto_import():
 
     token = get_token()
 
-    # 1) Get Foundation root and its top-level 'child' list
-    print("🌍 Fetching ICD-11 Foundation root...")
+    # Test connectivity with auth (MOVED here after token)
+    print("🔍 Testing WHO ICD URL connectivity...")
+    print("CA bundle path:", certifi.where())
+    try:
+        r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
+        print("WHO ICD status:", r.status_code)
+        print("WHO ICD content preview:", r.text[:200])
+    except Exception as e:
+        print("❌ WHO ICD test failed:", e)
+
+    # 1) Get MMS root and its top-level 'child' list
+    print("🌍 Fetching ICD-11 MMS root...")
     r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
     if r.status_code != 200:
-        raise RuntimeError(f"❌ Failed to fetch Foundation root: {r.status_code} {r.text[:200]}")
+        raise RuntimeError(f"❌ Failed to fetch MMS root: {r.status_code} {r.text[:200]}")
 
     root = r.json()
     roots = root.get("child", []) or []
@@ -154,15 +155,15 @@ def run_auto_import():
 
     print(f"📦 Total ICD entities collected: {len(all_items)}")
 
-    # 3) Insert
+    # 3) Insert (UPDATED: Add overview from definition; others left blank)
     with engine.begin() as conn:
         for e in all_items:
             conn.execute(
                 text("""
-                    INSERT INTO diseases (icd, name, overview)
-                    VALUES (:icd, :name, 'Imported from WHO ICD-11 (Foundation)');
+                    INSERT INTO diseases (icd, name, overview, symptoms_common, labs_key, red_flags, "references")
+                    VALUES (:icd, :name, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11 MMS');
                 """),
-                {"icd": e["icd"], "name": e["name"]},
+                {"icd": e["icd"], "name": e["name"], "overview": e["overview"]},
             )
 
     print("✅ Full ICD-11 import complete.")
