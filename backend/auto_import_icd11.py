@@ -1,22 +1,20 @@
 # backend/auto_import_icd11.py
 # Purpose: Traverse ICD-11 Foundation via WHO API and insert into PostgreSQL
 
-
-import ssl, certifi, os
-os.environ["SSL_CERT_FILE"] = certifi.where()
-os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
-ssl._create_default_https_context = ssl._create_unverified_context
-
+import os
 import time
 import requests
 from sqlalchemy import create_engine, text
-import requests, certifi
+import certifi
+
+os.environ["SSL_CERT_FILE"] = certifi.where()
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 print("🔍 Testing WHO ICD URL connectivity...")
 print("CA bundle path:", certifi.where())
 
 try:
-    r = requests.get("https://icd.who.int/ct/icd11_mms/en/release", verify=certifi.where())
+    r = requests.get("https://icd.who.int/ct/icd11_mms/en/release", verify=False)
     print("WHO ICD status:", r.status_code)
     print("WHO ICD content preview:", r.text[:200])
 except Exception as e:
@@ -45,7 +43,7 @@ def get_token() -> str:
         raise RuntimeError("❌ Missing WHO_CLIENT_ID or WHO_CLIENT_SECRET in environment")
     data = {"grant_type": "client_credentials", "scope": "icdapi_access"}
     print("🔑 Requesting WHO API token...")
-    r = requests.post(WHO_TOKEN_URL, data=data, auth=(client_id, client_secret))
+    r = requests.post(WHO_TOKEN_URL, data=data, auth=(client_id, client_secret), verify=False)
     if r.status_code != 200:
         raise RuntimeError(f"❌ Token request failed: {r.status_code} {r.text}")
     print("✅ WHO API token received.")
@@ -67,7 +65,7 @@ def normalize_entity_id(child_entry) -> str | None:
 
 def get_entity(entity_id: str, token: str) -> dict | None:
     url = f"{WHO_ENTITY_BASE}/{entity_id}"
-    r = requests.get(url, headers=_headers(token))
+    r = requests.get(url, headers=_headers(token), verify=False)
     print(f"Requesting: {r.url}")
     if r.status_code == 200:
         return r.json()
@@ -130,7 +128,7 @@ def run_auto_import():
 
     # 1) Get Foundation root and its top-level 'child' list
     print("🌍 Fetching ICD-11 Foundation root...")
-    r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token))
+    r = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
     if r.status_code != 200:
         raise RuntimeError(f"❌ Failed to fetch Foundation root: {r.status_code} {r.text[:200]}")
 
