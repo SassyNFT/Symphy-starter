@@ -1,10 +1,11 @@
 # backend/auto_import_icd11.py
 # Purpose: Traverse ICD-11 Foundation via WHO API and insert into PostgreSQL
 
+
 import ssl, certifi, os
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
-ssl._create_default_https_context = ssl._create_unverified_contextimport os
+ssl._create_default_https_context = ssl._create_unverified_context
 
 import time
 import requests
