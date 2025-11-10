@@ -19,7 +19,7 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
-WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/2025-01/mms"  # UPDATED: Specific release for 2025 MMS root
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # UPDATED: Current MMS root (2025 edition)
 
 # ---- HTTP helpers ----
 def _headers(token: str) -> dict:
@@ -81,7 +81,7 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) ->
 
     out = []
     title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
-    definition = (ent.get("definition") or {}).get("@value") or ""  # ADDED: Extract definition for overview
+    definition = (ent.get("definition") or {}).get("@value") or ""  # Extract definition for overview
     out.append({"icd": entity_id, "name": title, "overview": definition})
 
     children = ent.get("child", []) or []
@@ -121,7 +121,7 @@ def run_auto_import():
 
     token = get_token()
 
-    # Test connectivity with auth (MOVED here after token)
+    # Test connectivity with auth
     print("🔍 Testing WHO ICD URL connectivity...")
     print("CA bundle path:", certifi.where())
     try:
@@ -155,7 +155,7 @@ def run_auto_import():
 
     print(f"📦 Total ICD entities collected: {len(all_items)}")
 
-    # 3) Insert (UPDATED: Add overview from definition; others left blank)
+    # 3) Insert
     with engine.begin() as conn:
         for e in all_items:
             conn.execute(
