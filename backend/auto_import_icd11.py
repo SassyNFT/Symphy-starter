@@ -6,6 +6,10 @@ import time
 import requests
 from sqlalchemy import create_engine, text
 import certifi
+import urllib3  # Added for warning suppression
+
+# Suppress InsecureRequestWarning from verify=False (for this trusted API)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
@@ -14,7 +18,7 @@ print("🔍 Testing WHO ICD URL connectivity...")
 print("CA bundle path:", certifi.where())
 
 try:
-    r = requests.get("https://icd.who.int/ct/icd11_mms/en/release", verify=False)
+    r = requests.get("https://id.who.int/icd/release/11/mms", verify=False)  # Updated test URL to match new root
     print("WHO ICD status:", r.status_code)
     print("WHO ICD content preview:", r.text[:200])
 except Exception as e:
@@ -25,7 +29,7 @@ except Exception as e:
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_API_VERSION = "v2"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
-WHO_FOUNDATION_ROOT = "https://icd.who.int/ct/icd11_mms/en/release"
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # UPDATED: Correct JSON API endpoint for MMS root
 
 # ---- HTTP helpers ----
 def _headers(token: str) -> dict:
