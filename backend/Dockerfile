@@ -24,4 +24,4 @@ COPY . .
 # ✅ Healthcheck (optional)
 HEALTHCHECK CMD python -c "import requests, certifi; print(requests.get('https://icd.who.int/ct/icd11_mms/en/release', verify=certifi.where()).status_code)" || exit 1
 
-CMD ["python", "auto_import_icd11.py"]
+CMD ["uvicorn", "backend.api_server:app", "--host", "0.0.0.0", "--port", "8000"]
