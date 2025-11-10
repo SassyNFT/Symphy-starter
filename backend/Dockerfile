@@ -1,24 +1,28 @@
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Copy dependency file
 COPY requirements.txt .
 
-# ✅ Fix SSL certificate issues by installing CA certificates
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+# ✅ Install and refresh SSL certificate authorities
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl openssl && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# ✅ Ensure Python’s certifi store is updated
+RUN python -m pip install --upgrade pip certifi && \
+    python -m certifi > /etc/ssl/certs/ca-certificates.crt
+
+# Install project dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all project files
 COPY . .
 
-# Expose port (if you need it for FastAPI, Flask, etc.)
+# Expose port (if your app uses one)
 EXPOSE 8000
 
-# Default command
+# Start the app
 CMD ["python", "backend/main.py"]
