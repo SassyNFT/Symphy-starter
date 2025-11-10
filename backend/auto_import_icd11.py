@@ -100,8 +100,8 @@ def run_auto_import():
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
 
-   print("🧠 Using database:", db_url)
-   engine = create_engine(db_url)
+    print("🧠 Using database:", db_url)
+    engine = create_engine(db_url)
 
     # Recreate table
     with engine.begin() as conn:
