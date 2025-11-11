@@ -101,7 +101,7 @@ def run_auto_import():
         raise RuntimeError("❌ DATABASE_URL missing")
 
     print("🧠 Using database:", db_url)
-    engine = create_engine(db_url)
+    engine = create_engine(f"{db_url}?options=-csearch_path=public")
 
        # 🔍 Debug: print current schema in use
     with engine.connect() as conn:
