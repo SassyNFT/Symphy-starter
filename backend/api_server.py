@@ -30,6 +30,7 @@ if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL environment variable not set")
 
 engine = create_engine(DATABASE_URL)
+print(f"🧠 API started - Using database: {DATABASE_URL}")  # Debug on startup (visible in logs)
 
 # ---------------------------
 # 🔹 DATA MODELS
@@ -121,8 +122,8 @@ def get_diseases(limit: int = Query(50, ge=1, le=500)):
             diseases = [dict(row._mapping) for row in result]
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
+        print(f"❌ /diseases error: {str(e)}")  # Log for debug
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/search")
 def search_diseases(q: str = Query(..., description="Search by disease name or keyword")):
@@ -140,7 +141,19 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
             diseases = [dict(row._mapping) for row in result]
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
+        print(f"❌ /search error: {str(e)}")  # Log for debug
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/diseases/count")  # Added: Quick count endpoint for testing
+def get_diseases_count():
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM diseases"))
+            count = result.scalar() or 0
+        return {"icd_diseases_loaded": count}
+    except Exception as e:
+        print(f"❌ /diseases/count error: {str(e)}")
+        return {"icd_diseases_loaded": 0, "error": str(e)}
 
 # ---------------------------
 # 🔹 SYSTEM STATUS ENDPOINT
@@ -148,15 +161,14 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
 @app.get("/status")
 def get_status():
     try:
-        # Connect to DB engine already created
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM diseases;"))
-            count = result.scalar() or 0
-
-        # Mask DB URL for debug (safe to print)
+        # Mask DB URL for safe logging
         db_url = os.getenv("DATABASE_URL", "")
         masked_db = db_url[:25] + "..." + db_url[-10:] if db_url else "None"
-        print(f"🔍 API Server using DB: {masked_db}, found {count} rows")
+        print(f"🔍 /status - Using DB: {masked_db}")
+
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM diseases"))
+            count = result.scalar() or 0
 
         return {
             "status": "ok",
@@ -166,9 +178,11 @@ def get_status():
         }
 
     except Exception as e:
-        print(f"❌ /status DB check failed: {e}")
+        print(f"❌ /status DB check failed: {str(e)}")
         return {
             "status": "error",
             "icd_diseases_loaded": 0,
+            "database_url": "connected",
+            "version": "1.2.0",
             "error": str(e)
         }
