@@ -103,6 +103,11 @@ def run_auto_import():
     print("🧠 Using database:", db_url)
     engine = create_engine(db_url)
 
+       # 🔍 Debug: print current schema in use
+        with engine.connect() as conn:
+        schema_result = conn.execute(text("SELECT current_schema();")).scalar()
+        print("📂 Current schema:", schema_result)
+    
     # Recreate table
     with engine.begin() as conn:
         conn.execute(text("""
