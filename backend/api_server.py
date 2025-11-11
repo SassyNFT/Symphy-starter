@@ -29,7 +29,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL environment variable not set")
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(f"{DATABASE_URL}?options=-csearch_path=public")
 print(f"🧠 API started - Using database: {DATABASE_URL}")  # Debug on startup (visible in logs)
 
 # ---------------------------
