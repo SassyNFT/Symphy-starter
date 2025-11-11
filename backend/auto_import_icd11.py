@@ -104,7 +104,7 @@ def run_auto_import():
     engine = create_engine(db_url)
 
        # 🔍 Debug: print current schema in use
-        with engine.connect() as conn:
+    with engine.connect() as conn:
         schema_result = conn.execute(text("SELECT current_schema();")).scalar()
         print("📂 Current schema:", schema_result)
     
