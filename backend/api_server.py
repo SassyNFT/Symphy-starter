@@ -8,33 +8,25 @@ from typing import List, Optional
 from sqlalchemy import create_engine, text
 import os
 
-# ---------------------------
-# 🔹 APP SETUP
-# ---------------------------
 app = FastAPI(title="Symphy API", version="1.2.0")
 
-# ✅ Allow your live frontend domain to access the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://symphy-web.onrender.com"],  # your exact frontend URL
+    allow_origins=["https://symphy-web.onrender.com"],
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
 )
 
-# ---------------------------
-# 🔹 DATABASE CONNECTION
-# ---------------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL environment variable not set")
 
-engine = create_engine(f"{DATABASE_URL}?options=-csearch_path=public")
-print(f"🧠 API started - Using database: {DATABASE_URL}")  # Debug on startup (visible in logs)
+engine = create_engine(DATABASE_URL)  # FIXED: No appended ?options
 
-# ---------------------------
-# 🔹 DATA MODELS
-# ---------------------------
+masked_db = DATABASE_URL[:25] + "..." + DATABASE_URL[-10:] if DATABASE_URL else "None"
+print(f"🧠 API started - Using database: {masked_db}")
+
 class LabItem(BaseModel):
     name: str
     value: float
@@ -49,24 +41,13 @@ class AnalyzeInput(BaseModel):
     max_candidates: int = 5
     language: str = "en"
 
-# ---------------------------
-# 🔹 ROOT CHECK
-# ---------------------------
 @app.get("/")
 def root():
     return {"status": "✅ Symphy API is live", "docs": "/docs"}
 
-# ---------------------------
-# 🔹 ANALYZE ENDPOINT
-# ---------------------------
 @app.post("/analyze")
 def analyze(input_data: AnalyzeInput):
-    """
-    Basic mock analyzer. You can later connect this to your AI logic.
-    """
     text_lower = input_data.symptoms_free_text.lower()
-
-    # Example rule: tooth pain
     if "tooth" in text_lower or "gum" in text_lower:
         return {
             "needs_more_data": False,
@@ -85,7 +66,6 @@ def analyze(input_data: AnalyzeInput):
             "disclaimer": "This is a demonstration response — not medical advice.",
         }
 
-    # Default
     return {
         "needs_more_data": False,
         "error": None,
@@ -103,15 +83,8 @@ def analyze(input_data: AnalyzeInput):
         "disclaimer": "This is a demonstration response — not medical advice.",
     }
 
-# ---------------------------
-# 🔹 ICD-11 DATABASE ENDPOINTS
-# ---------------------------
-
 @app.get("/diseases")
 def get_diseases(limit: int = Query(50, ge=1, le=500)):
-    """
-    Return a list of ICD-11 diseases (limit 50 by default)
-    """
     try:
         with engine.connect() as conn:
             result = conn.execute(text("""
@@ -122,14 +95,11 @@ def get_diseases(limit: int = Query(50, ge=1, le=500)):
             diseases = [dict(row._mapping) for row in result]
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
-        print(f"❌ /diseases error: {str(e)}")  # Log for debug
+        print(f"❌ /diseases error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/search")
 def search_diseases(q: str = Query(..., description="Search by disease name or keyword")):
-    """
-    Search for ICD-11 diseases by name or keyword (case-insensitive)
-    """
     try:
         with engine.connect() as conn:
             result = conn.execute(text("""
@@ -141,10 +111,10 @@ def search_diseases(q: str = Query(..., description="Search by disease name or k
             diseases = [dict(row._mapping) for row in result]
         return {"count": len(diseases), "data": diseases}
     except Exception as e:
-        print(f"❌ /search error: {str(e)}")  # Log for debug
+        print(f"❌ /search error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/diseases/count")  # Added: Quick count endpoint for testing
+@app.get("/diseases/count")
 def get_diseases_count():
     try:
         with engine.connect() as conn:
@@ -155,18 +125,23 @@ def get_diseases_count():
         print(f"❌ /diseases/count error: {str(e)}")
         return {"icd_diseases_loaded": 0, "error": str(e)}
 
-# ---------------------------
-# 🔹 SYSTEM STATUS ENDPOINT
-# ---------------------------
 @app.get("/status")
 def get_status():
     try:
-        # Mask DB URL for safe logging
         db_url = os.getenv("DATABASE_URL", "")
         masked_db = db_url[:25] + "..." + db_url[-10:] if db_url else "None"
         print(f"🔍 /status - Using DB: {masked_db}")
 
         with engine.connect() as conn:
+            # Check if table exists
+            table_exists = conn.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = 'diseases'
+                )
+            """)).scalar()
+            print(f"Table 'diseases' exists: {table_exists}")
+
             result = conn.execute(text("SELECT COUNT(*) FROM diseases"))
             count = result.scalar() or 0
 
