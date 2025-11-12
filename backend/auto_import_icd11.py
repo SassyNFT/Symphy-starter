@@ -7,6 +7,10 @@ import requests
 from sqlalchemy import create_engine, text
 import certifi
 import urllib3  # For warning suppression
+try:
+    from slugify import slugify  # Optional: for slugs (pip install if needed)
+except ImportError:
+    slugify = lambda x: ""  # Fallback if not installed
 
 # Suppress InsecureRequestWarning from verify=False (for this trusted API)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -44,12 +48,7 @@ def get_token() -> str:
     return r.json()["access_token"]
 
 def normalize_entity_id(child_entry) -> str | None:
-    """
-    The API returns child entries either as URIs (strings) or objects.
-    This returns the trailing numeric ID as a string.
-    """
     if isinstance(child_entry, str):
-        # e.g., "http://id.who.int/icd/entity/1405434703"
         return child_entry.rstrip("/").split("/")[-1]
     if isinstance(child_entry, dict):
         uri = child_entry.get("@id") or child_entry.get("id")
@@ -63,15 +62,10 @@ def get_entity(entity_id: str, token: str) -> dict | None:
     print(f"Requesting: {r.url}")
     if r.status_code == 200:
         return r.json()
-    # It’s common for a few IDs to be non-browseable in some releases
     print(f"⚠️ Could not GET entity {entity_id}: {r.status_code} {r.text[:200]}")
     return None
 
 def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) -> list[dict]:
-    """
-    Recursively fetch entity -> child list -> recurse.
-    We don't use '/children' endpoint; we read 'child' from the entity itself.
-    """
     if depth > max_depth:
         return []
 
@@ -81,16 +75,16 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) ->
 
     out = []
     title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
-    definition = (ent.get("definition") or {}).get("@value") or ""  # Extract definition for overview
-    out.append({"icd": entity_id, "name": title, "overview": definition})
+    definition = (ent.get("definition") or {}).get("@value") or ""
+    slug = slugify(title)
+    out.append({"icd": entity_id, "name": title, "overview": definition, "slug": slug})
 
     children = ent.get("child", []) or []
     for child in children:
         cid = normalize_entity_id(child)
         if not cid:
             continue
-        # brief backoff to be gentle with the API
-        time.sleep(0.15)
+        time.sleep(0.1)
         out.extend(traverse_children(cid, token, depth + 1, max_depth))
     return out
 
@@ -100,22 +94,38 @@ def run_auto_import():
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
 
-    print("🧠 Using database:", db_url)
-    engine = create_engine(f"{db_url}?options=-csearch_path=public")
+    print(f"🧠 Using database: {db_url}")
+    engine = create_engine(db_url)
 
-       # 🔍 Debug: print current schema in use
-    with engine.connect() as conn:
-        schema_result = conn.execute(text("SELECT current_schema();")).scalar()
-        print("📂 Current schema:", schema_result)
-    
-    # Recreate table
+    preserve_table = os.getenv("PRESERVE_TABLE", "0") == "1"
+
     with engine.begin() as conn:
+        # Check if table exists
+        table_exists = conn.execute(text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'diseases'
+            )
+        """)).scalar()
+
+        if table_exists:
+            count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+            print(f"📊 Existing table has {count} rows.")
+            if preserve_table or count > 0:
+                print("✅ Preserving table (skipping drop/recreate).")
+            else:
+                conn.execute(text("DROP TABLE IF EXISTS diseases;"))
+                print("🧹 Dropped existing table.")
+        else:
+            print("🆕 No existing table found.")
+
+        # Create table if not exists
         conn.execute(text("""
-            DROP TABLE IF EXISTS diseases;
-            CREATE TABLE diseases (
+            CREATE TABLE IF NOT EXISTS diseases (
                 id SERIAL PRIMARY KEY,
-                icd TEXT,
+                icd TEXT UNIQUE,
                 name TEXT,
+                slug TEXT UNIQUE,
                 overview TEXT,
                 symptoms_common TEXT,
                 labs_key TEXT,
@@ -169,22 +179,38 @@ def run_auto_import():
         rid = normalize_entity_id(entry)
         if not rid:
             continue
-        # small delay between top-level traversals
-        time.sleep(0.2)
+        time.sleep(0.15)
         all_items.extend(traverse_children(rid, token, depth=0, max_depth=MAX_DEPTH))
 
     print(f"📦 Total ICD entities collected: {len(all_items)}")
 
-    # 4) Insert
-    with engine.begin() as conn:
-        for e in all_items:
-            conn.execute(
-                text("""
-                    INSERT INTO diseases (icd, name, overview, symptoms_common, labs_key, red_flags, "references")
-                    VALUES (:icd, :name, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11 MMS');
-                """),
-                {"icd": e["icd"], "name": e["name"], "overview": e["overview"]},
-            )
+    # 4) Bulk insert with progress and error handling
+    if all_items:
+        with engine.connect() as conn:  # Use connect() for manual commit if needed
+            batch_size = 500  # Optimized batch size
+            for i in range(0, len(all_items), batch_size):
+                batch = all_items[i:i + batch_size]
+                try:
+                    conn.execute(
+                        text("""
+                            INSERT INTO diseases (icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
+                            VALUES (:icd, :name, :slug, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11 MMS')
+                            ON CONFLICT (icd) DO UPDATE SET 
+                                name = EXCLUDED.name,
+                                slug = EXCLUDED.slug,
+                                overview = EXCLUDED.overview;
+                        """),
+                        [ {"icd": e["icd"], "name": e["name"], "slug": e["slug"], "overview": e["overview"]} for e in batch ]
+                    )
+                    conn.commit()  # Explicit commit per batch
+                    print(f"Progress: Inserted batch {i//batch_size + 1} ({len(batch)} rows)")
+                except Exception as ex:
+                    print(f"⚠️ Batch insert failed: {str(ex)}")
+
+            # Final verification
+            result = conn.execute(text("SELECT COUNT(*) FROM diseases"))
+            final_count = result.scalar()
+            print(f"✅ Total rows in DB after import: {final_count}")
 
     print("✅ Full ICD-11 import complete.")
 
