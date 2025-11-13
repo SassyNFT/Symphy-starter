@@ -205,3 +205,35 @@ def get_status():
             "error": str(e),
             "version": "1.2.0"
         }
+
+# -----------------------------
+# Deep Database Debugging Route
+# -----------------------------
+@app.get("/debug/db")
+def debug_db():
+    """
+    Shows ALL tables, their schema, and verifies what the API can see.
+    This is the fastest way to confirm where your data actually is.
+    """
+    try:
+        with engine.connect() as conn:
+            # List all tables
+            tables = conn.execute(text("""
+                SELECT table_schema, table_name
+                FROM information_schema.tables
+                ORDER BY table_schema, table_name;
+            """)).fetchall()
+
+            # Try to count diseases (if table exists)
+            try:
+                count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+            except Exception as suberr:
+                count = f"❌ Can't read diseases table: {suberr}"
+
+        return {
+            "tables": [dict(row._mapping) for row in tables],
+            "diseases_count": count
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
