@@ -22,7 +22,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL environment variable not set")
 
-engine = create_engine(DATABASE_URL)  # FIXED: No appended ?options
+engine = create_engine(DATABASE_URL)
+
+# Force all connections to use public schema
+with engine.connect() as conn:
+    conn.execute(text("SET search_path TO public;"))
 
 masked_db = DATABASE_URL[:25] + "..." + DATABASE_URL[-10:] if DATABASE_URL else "None"
 print(f"🧠 API started - Using database: {masked_db}")
