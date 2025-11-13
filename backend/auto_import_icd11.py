@@ -90,6 +90,7 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int) ->
 
 def run_auto_import():
     print("🔗 Connecting to database...")
+
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
@@ -97,26 +98,31 @@ def run_auto_import():
     print(f"🧠 Using database: {db_url}")
     engine = create_engine(db_url)
 
-    with engine.begin() as conn:
+    # --------------------------------------------
+    # TABLE RESET + CREATION
+    # --------------------------------------------
     print("🧹 Dropping old diseases table (if exists)...")
-    conn.execute(text("DROP TABLE IF EXISTS diseases;"))
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS diseases;"))
 
-    print("🛠 Creating fresh diseases table...")
-    conn.execute(text("""
-        CREATE TABLE diseases (
-            id SERIAL PRIMARY KEY,
-            icd TEXT UNIQUE,
-            name TEXT,
-            slug TEXT,
-            overview TEXT,
-            symptoms_common TEXT,
-            labs_key TEXT,
-            red_flags TEXT,
-            "references" TEXT
-        );
-    """))
+        print("🛠️ Creating fresh diseases table...")
+        conn.execute(text("""
+            CREATE TABLE diseases (
+                id SERIAL PRIMARY KEY,
+                icd TEXT UNIQUE,
+                name TEXT,
+                slug TEXT UNIQUE,
+                overview TEXT,
+                symptoms_common TEXT,
+                labs_key TEXT,
+                red_flags TEXT,
+                "references" TEXT
+            );
+        """))
 
     print("✅ Fresh 'diseases' table created.")
+
+    # Continue your import code...
     
     token = get_token()
 
