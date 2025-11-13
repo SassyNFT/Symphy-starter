@@ -112,7 +112,7 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int):
         if not cid:
             continue
 
-        time.sleep(0.12)  # Avoid hitting WHO too fast
+        time.sleep(0.12)
         collected.extend(traverse_children(cid, token, depth + 1, max_depth))
 
     return collected
@@ -129,7 +129,7 @@ def run_auto_import():
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
 
-    # Force public schema for worker
+    # Force public schema for the worker (CRITICAL FIX)
     engine = create_engine(
         db_url,
         connect_args={"options": "-c search_path=public"}
@@ -138,19 +138,19 @@ def run_auto_import():
     print(f"🧠 Using DB: {db_url[:25]}...{db_url[-10:]}")
 
     # ----------------------------------------------------------------
-    # RESET TABLE
+    # RESET TABLE (in public schema)
     # ----------------------------------------------------------------
-    print("🧹 Resetting diseases table...")
+    print("🧹 Resetting public.diseases table...")
 
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS diseases;"))
+        conn.execute(text("DROP TABLE IF EXISTS public.diseases;"))
 
         conn.execute(text("""
-            CREATE TABLE diseases (
+            CREATE TABLE public.diseases (
                 id SERIAL PRIMARY KEY,
                 icd TEXT UNIQUE,
                 name TEXT,
-                slug TEXT,               -- ❗ FIXED: no UNIQUE constraint
+                slug TEXT,              -- FIXED: not unique
                 overview TEXT,
                 symptoms_common TEXT,
                 labs_key TEXT,
@@ -159,7 +159,7 @@ def run_auto_import():
             );
         """))
 
-    print("✅ Table recreated clean.")
+    print("✅ Table recreated clean in schema: public")
 
     # ----------------------------------------------------------------
     # FETCH TOKEN + ROOT
@@ -220,7 +220,7 @@ def run_auto_import():
                 try:
                     conn.execute(
                         text("""
-                            INSERT INTO diseases
+                            INSERT INTO public.diseases
                             (icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
                             VALUES (:icd, :name, :slug, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11')
                             ON CONFLICT (icd) DO UPDATE SET
@@ -238,8 +238,7 @@ def run_auto_import():
                     print(f"⚠️ Batch failed: {e}")
                     conn.rollback()
 
-            # Final count
-            final_count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+            final_count = conn.execute(text("SELECT COUNT(*) FROM public.diseases")).scalar()
             print(f"🎉 Final row count: {final_count}")
 
     print("🎯 ICD-11 import finished successfully.")
