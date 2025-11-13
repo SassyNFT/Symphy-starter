@@ -97,7 +97,7 @@ def run_auto_import():
     print(f"🧠 Using database: {db_url}")
     engine = create_engine(db_url)
 
-    with engine.begin() as conn:
+with engine.begin() as conn:
     print("🧹 Dropping old diseases table (if exists)...")
     conn.execute(text("DROP TABLE IF EXISTS diseases;"))
 
