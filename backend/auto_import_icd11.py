@@ -97,44 +97,27 @@ def run_auto_import():
     print(f"🧠 Using database: {db_url}")
     engine = create_engine(db_url)
 
-    preserve_table = os.getenv("PRESERVE_TABLE", "0") == "1"
-
     with engine.begin() as conn:
-        # Check if table exists
-        table_exists = conn.execute(text("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'diseases'
-            )
-        """)).scalar()
+    print("🧹 Dropping old diseases table (if exists)...")
+    conn.execute(text("DROP TABLE IF EXISTS diseases;"))
 
-        if table_exists:
-            count = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
-            print(f"📊 Existing table has {count} rows.")
-            if preserve_table or count > 0:
-                print("✅ Preserving table (skipping drop/recreate).")
-            else:
-                conn.execute(text("DROP TABLE IF EXISTS diseases;"))
-                print("🧹 Dropped existing table.")
-        else:
-            print("🆕 No existing table found.")
+    print("🛠 Creating fresh diseases table...")
+    conn.execute(text("""
+        CREATE TABLE diseases (
+            id SERIAL PRIMARY KEY,
+            icd TEXT UNIQUE,
+            name TEXT,
+            slug TEXT,
+            overview TEXT,
+            symptoms_common TEXT,
+            labs_key TEXT,
+            red_flags TEXT,
+            "references" TEXT
+        );
+    """))
 
-        # Create table if not exists
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS diseases (
-                id SERIAL PRIMARY KEY,
-                icd TEXT UNIQUE,
-                name TEXT,
-                slug TEXT UNIQUE,
-                overview TEXT,
-                symptoms_common TEXT,
-                labs_key TEXT,
-                red_flags TEXT,
-                "references" TEXT
-            );
-        """))
-    print("✅ Table 'diseases' ready.")
-
+    print("✅ Fresh 'diseases' table created.")
+    
     token = get_token()
 
     # Test connectivity with auth
