@@ -1,25 +1,74 @@
 services:
-  # -------- Flask API Backend --------
+
+  # ---------------------------------------------------
+  # BACKEND API (FastAPI or Flask)
+  # ---------------------------------------------------
   - type: web
     name: symphy-api
     env: python
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+
+    # IMPORTANT: You deleted app.py — so fix the start command
+    startCommand: uvicorn api_server:app --host 0.0.0.0 --port 10000
+
     autoDeploy: true
     healthCheckPath: /
+
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
-    - key: WHO_CLIENT_ID
-      value: 806c1686-e9a8-4f53-9336-869cb19787dd_1f81789d-d38a-474f-b83c-51fe8a8d6aea
-    - key: WHO_CLIENT_SECRET
-      value: 7VNOd76In0PzX0WW1pU5LBcnQWC0tgxHK8m7rtvxUww=
-    - key: RUN_AUTO_IMPORT
-      value: "true"
-      
-  # -------- Frontend (Static Site via Vite/Node) --------
+
+      # DO NOT SYNC — use dashboard for real secrets
+      - key: DATABASE_URL
+        sync: false
+
+      - key: WHO_CLIENT_ID
+        sync: false
+
+      - key: WHO_CLIENT_SECRET
+        sync: false
+
+      - key: RUN_AUTO_IMPORT
+        value: "false"
+
+
+  # ---------------------------------------------------
+  # BACKGROUND WORKER (ICD-11 Import)
+  # ---------------------------------------------------
+  - type: worker
+    name: symphy-worker
+    env: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+
+    # Worker runs main.py (your import logic)
+    startCommand: python main.py
+
+    autoDeploy: true
+
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      - key: KEEP_RUNNING
+        value: "true"
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: WHO_CLIENT_ID
+        sync: false
+
+      - key: WHO_CLIENT_SECRET
+        sync: false
+
+
+  # ---------------------------------------------------
+  # FRONTEND (Vite + Static Hosting)
+  # ---------------------------------------------------
   - type: web
     name: symphy-web
     env: static
@@ -27,9 +76,12 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    autoDeploy: true
+
     envVars:
       - key: NODE_VERSION
         value: "20"
+
       - key: VITE_API_BASE
         fromService:
           type: web
