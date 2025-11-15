@@ -110,7 +110,11 @@ def analyze(input_data: AnalyzeInput):
 # Get diseases
 # -----------------------------
 @app.get("/diseases")
-def get_diseases(limit: int = Query(50, ge=1, le=500)):
+def get_diseases(limit: int = Query(5000, ge=1, le=10000)):
+    """
+    Return diseases from the database.
+    Increased default + max limit so the full 3300+ ICD-11 entries load.
+    """
     try:
         with engine.connect() as conn:
             result = conn.execute(text("""
@@ -126,7 +130,6 @@ def get_diseases(limit: int = Query(50, ge=1, le=500)):
     except Exception as e:
         print(f"❌ /diseases error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # -----------------------------
 # Search
