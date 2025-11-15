@@ -8,12 +8,6 @@ import certifi
 import urllib3
 from sqlalchemy import create_engine, text
 
-# Optional slug helper
-try:
-    from slugify import slugify
-except ImportError:
-    slugify = lambda x: ""
-
 # Disable SSL warnings (WHO API uses custom cert chain)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -98,12 +92,10 @@ def traverse_children(entity_id, token, depth, max_depth):
 
     title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
     definition = (ent.get("definition") or {}).get("@value") or ""
-    slug = slugify(title)
 
     collected = [{
         "icd": entity_id,
         "name": title,
-        "slug": slug,
         "overview": definition
     }]
 
@@ -128,7 +120,7 @@ def run_auto_import():
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
 
-    # Force public schema
+    # Force public schema (this is safe)
     engine = create_engine(
         db_url,
         connect_args={"options": "-c search_path=public"}
@@ -157,7 +149,7 @@ def run_auto_import():
                     id SERIAL PRIMARY KEY,
                     icd TEXT UNIQUE,
                     name TEXT,
-                    slug TEXT,
+                    name TEXT,
                     overview TEXT,
                     symptoms_common TEXT,
                     labs_key TEXT,
@@ -210,10 +202,10 @@ def run_auto_import():
     print(f"📦 Total collected: {len(all_items)}")
 
     # ----------------------------------------------------------------------
-    # BULK INSERT / UPSERT
+    # BULK INSERT / UPSERT (NO SLUG = NO UNIQUE VIOLATION)
     # ----------------------------------------------------------------------
     if all_items:
-        batch_size = 400
+        batch_size = 500
 
         with engine.connect() as conn:
             for i in range(0, len(all_items), batch_size):
@@ -223,25 +215,23 @@ def run_auto_import():
                     conn.execute(
                         text("""
                             INSERT INTO diseases
-                            (icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
-                            VALUES (:icd, :name, :slug, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11')
+                            (icd, name, overview, symptoms_common, labs_key, red_flags, "references")
+                            VALUES (:icd, :name, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11')
                             ON CONFLICT (icd) DO UPDATE SET
-                                name=EXCLUDED.name,
-                                slug=EXCLUDED.slug,
-                                overview=EXCLUDED.overview;
+                                name = EXCLUDED.name,
+                                overview = EXCLUDED.overview;
                         """),
                         batch
                     )
                     conn.commit()
-                    print(f"✅ Batch {i//batch_size + 1} inserted")
+                    print(f"✅ Batch {i//batch_size + 1} committed ({len(batch)} rows)")
 
                 except Exception as e:
-                    print(f"⚠️ Batch insert failed: {e}")
+                    print(f"⚠️ Batch failed: {e}")
                     conn.rollback()
 
-            # final count
             final = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
-            print(f"🎉 Final total rows: {final}")
+            print(f"🎉 Final total rows in DB: {final}")
 
     print("🎯 ICD-11 import COMPLETED successfully.")
 
