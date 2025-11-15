@@ -273,7 +273,7 @@ function App() {
   ─────────────────────────────── */
   useEffect(() => {
     setDiseasesLoading(true);
-    fetch(`${API_BASE}/diseases?limit=500`)
+    fetch(`${API_BASE}/diseases?limit=5000`)
       .then((r) => r.json())
       .then((data) => {
         const rows: any[] = data?.data || [];
