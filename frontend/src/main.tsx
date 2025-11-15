@@ -3,6 +3,13 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 
 /* ──────────────────────────────────────────────────────────────
+   CONFIG
+────────────────────────────────────────────────────────────── */
+
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE || "https://symphy-api.onrender.com";
+
+/* ──────────────────────────────────────────────────────────────
    TYPES
 ────────────────────────────────────────────────────────────── */
 
@@ -29,16 +36,17 @@ interface RefSpec {
 
 type RefTable = Record<string, RefSpec>;
 
+// NOTE: Many DB fields are still plain TEXT, so we accept string | string[]
 interface Disease {
   name: string;
   slug: string;
   icd?: string;
-  overview?: string;
-  symptoms_common?: string[];
-  labs_key?: string[];
-  red_flags?: string[];
-  references?: { title: string; url: string }[];
-  notes_from_doctors?: string[];
+  overview?: string | null;
+  symptoms_common?: string[] | string | null;
+  labs_key?: string[] | string | null;
+  red_flags?: string[] | string | null;
+  references?: { title: string; url: string }[] | string | null;
+  notes_from_doctors?: string[]; // For future backend integration
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -98,15 +106,53 @@ function valueColor(
   if (num > rng.high) return "#D90429"; // high = red
   return "#198754"; // normal = green
 }
+
+// Safely normalize DB string vs array fields
+function normalizeList(field: string[] | string | null | undefined): string[] {
+  if (!field) return [];
+  if (Array.isArray(field)) return field;
+  const trimmed = field.trim();
+  if (!trimmed) return [];
+  // Split on newline or semicolon
+  return trimmed.split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
 /* ──────────────────────────────────────────────────────────────
    CANADIAN REFERENCE RANGES
 ────────────────────────────────────────────────────────────── */
 
 const REF: RefTable = {
-  WBC: { unit: "×10⁹/L", child: { low: 5, high: 15 }, teen: { low: 4.5, high: 13 }, adult: { low: 4, high: 11 }, senior: { low: 3.5, high: 11 } },
-  RBC: { unit: "×10¹²/L", child: { low: 3.9, high: 5.3 }, teen: { low: 4.1, high: 5.7 }, male: { low: 4.5, high: 6.0 }, female: { low: 4.0, high: 5.2 }, seniorMale: { low: 4.3, high: 5.8 }, seniorFemale: { low: 3.8, high: 5.1 } },
-  Hemoglobin: { unit: "g/L", child: { low: 110, high: 140 }, teen: { low: 115, high: 160 }, male: { low: 130, high: 170 }, female: { low: 120, high: 150 }, seniorMale: { low: 125, high: 170 }, seniorFemale: { low: 115, high: 150 } },
-  Hematocrit: { unit: "L/L", male: { low: 0.40, high: 0.50 }, female: { low: 0.36, high: 0.46 }, child: { low: 0.34, high: 0.42 } },
+  WBC: {
+    unit: "×10⁹/L",
+    child: { low: 5, high: 15 },
+    teen: { low: 4.5, high: 13 },
+    adult: { low: 4, high: 11 },
+    senior: { low: 3.5, high: 11 },
+  },
+  RBC: {
+    unit: "×10¹²/L",
+    child: { low: 3.9, high: 5.3 },
+    teen: { low: 4.1, high: 5.7 },
+    male: { low: 4.5, high: 6.0 },
+    female: { low: 4.0, high: 5.2 },
+    seniorMale: { low: 4.3, high: 5.8 },
+    seniorFemale: { low: 3.8, high: 5.1 },
+  },
+  Hemoglobin: {
+    unit: "g/L",
+    child: { low: 110, high: 140 },
+    teen: { low: 115, high: 160 },
+    male: { low: 130, high: 170 },
+    female: { low: 120, high: 150 },
+    seniorMale: { low: 125, high: 170 },
+    seniorFemale: { low: 115, high: 150 },
+  },
+  Hematocrit: {
+    unit: "L/L",
+    male: { low: 0.4, high: 0.5 },
+    female: { low: 0.36, high: 0.46 },
+    child: { low: 0.34, high: 0.42 },
+  },
   MCV: { unit: "fL", default: { low: 80, high: 100 } },
   MCH: { unit: "pg", default: { low: 27, high: 34 } },
   MCHC: { unit: "g/L", default: { low: 320, high: 360 } },
@@ -116,14 +162,18 @@ const REF: RefTable = {
   ESR: { unit: "mm/h", male: { low: 0, high: 15 }, female: { low: 0, high: 20 } },
   Glucose: { unit: "mmol/L", default: { low: 3.9, high: 7.8 } },
   Urea: { unit: "mmol/L", adult: { low: 2.5, high: 7.5 } },
-  Creatinine: { unit: "µmol/L", male: { low: 60, high: 115 }, female: { low: 45, high: 90 } },
+  Creatinine: {
+    unit: "µmol/L",
+    male: { low: 60, high: 115 },
+    female: { low: 45, high: 90 },
+  },
   Sodium: { unit: "mmol/L", default: { low: 135, high: 145 } },
   Potassium: { unit: "mmol/L", default: { low: 3.5, high: 5.0 } },
   Chloride: { unit: "mmol/L", default: { low: 98, high: 107 } },
   Bicarbonate: { unit: "mmol/L", default: { low: 22, high: 29 } },
-  Calcium: { unit: "mmol/L", default: { low: 2.10, high: 2.60 } },
-  Magnesium: { unit: "mmol/L", default: { low: 0.70, high: 1.05 } },
-  Phosphate: { unit: "mmol/L", adult: { low: 0.80, high: 1.50 } },
+  Calcium: { unit: "mmol/L", default: { low: 2.1, high: 2.6 } },
+  Magnesium: { unit: "mmol/L", default: { low: 0.7, high: 1.05 } },
+  Phosphate: { unit: "mmol/L", adult: { low: 0.8, high: 1.5 } },
   ALT: { unit: "U/L", male: { low: 0, high: 55 }, female: { low: 0, high: 45 } },
   AST: { unit: "U/L", default: { low: 0, high: 45 } },
   ALP: { unit: "U/L", adult: { low: 30, high: 120 } },
@@ -131,42 +181,72 @@ const REF: RefTable = {
   Albumin: { unit: "g/L", adult: { low: 35, high: 50 } },
   TotalProtein: { unit: "g/L", default: { low: 60, high: 80 } },
   CholesterolTotal: { unit: "mmol/L", adult: { low: 3.5, high: 5.2 } },
-  HDL: { unit: "mmol/L", male: { low: 1.0, high: 2.4 }, female: { low: 1.3, high: 2.4 } },
+  HDL: {
+    unit: "mmol/L",
+    male: { low: 1.0, high: 2.4 },
+    female: { low: 1.3, high: 2.4 },
+  },
   LDL: { unit: "mmol/L", adult: { low: 0, high: 3.5 } },
   Triglycerides: { unit: "mmol/L", adult: { low: 0, high: 1.7 } },
   TSH: { unit: "mIU/L", default: { low: 0.4, high: 4.5 } },
   FreeT4: { unit: "pmol/L", default: { low: 10, high: 22 } },
-  Ferritin: { unit: "µg/L", male: { low: 30, high: 400 }, female: { low: 15, high: 150 } },
+  Ferritin: {
+    unit: "µg/L",
+    male: { low: 30, high: 400 },
+    female: { low: 15, high: 150 },
+  },
   PSA: { unit: "µg/L", male: { low: 0, high: 4 } },
 };
+
 /* ──────────────────────────────────────────────────────────────
    MAIN APP COMPONENT
 ────────────────────────────────────────────────────────────── */
 
 function App() {
-  const [activeTab, setActiveTab] = useState<"symptoms" | "labs" | "vitals" | "library">("symptoms");
+  const [activeTab, setActiveTab] = useState<
+    "symptoms" | "labs" | "vitals" | "library"
+  >("symptoms");
 
   const [age, setAge] = useState<number | null>(null);
   const [sex, setSex] = useState<SexKey | null>(null);
-  const demographicsSet = useMemo(() => age !== null && sex !== null, [age, sex]);
+  const demographicsSet = useMemo(
+    () => age !== null && sex !== null,
+    [age, sex]
+  );
 
   const [symptoms, setSymptoms] = useState("");
-  const [vitals, setVitals] = useState({ Temp: "", HR: "", BP: "", O2: "" });
+  const [vitals, setVitals] = useState({
+    Temp: "",
+    HR: "",
+    BP: "",
+    O2: "",
+  });
   const [labTests, setLabTests] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<string, string[]>>({});
   const [search, setSearch] = useState("");
+
   const [error, setError] = useState("");
-  const [result, setResult] = useState("");
-  const [candidates, setCandidates] = useState<{ name: string; slug: string; icd?: string; score?: number }[]>([]);
+  const [result, setResult] = useState(""); // raw JSON string (debug)
+  const [candidates, setCandidates] = useState<
+    { name: string; slug: string; icd?: string; score?: number }[]
+  >([]);
+
+  const [loadingAnalyze, setLoadingAnalyze] = useState(false);
 
   // Disease Library
   const [diseases, setDiseases] = useState<Disease[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
   const [letter, setLetter] = useState("All");
   const [selectedDisease, setSelectedDisease] = useState<Disease | null>(null);
+  const [loadingDiseases, setLoadingDiseases] = useState(false);
+
+  // Clinician notes
+  const [newNote, setNewNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState("");
 
   /* ───────────────────────────────
-     Load Lab Tests and Diseases
+     Load Lab Tests
   ─────────────────────────────── */
   useEffect(() => {
     fetch("/labTests.json")
@@ -181,11 +261,29 @@ function App() {
       .catch(() => setError("Could not load lab test definitions."));
   }, []);
 
+  /* ───────────────────────────────
+     Load Diseases from API (DB)
+  ─────────────────────────────── */
   useEffect(() => {
-    fetch("/diseases.json")
-      .then((r) => r.json())
-      .then((data: Disease[]) => setDiseases(data))
-      .catch(() => setError("Could not load disease library."));
+    setLoadingDiseases(true);
+    setError("");
+
+    fetch(`${API_BASE}/diseases?limit=500`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.data) {
+          setDiseases(data.data);
+        } else {
+          setError("API returned no disease data.");
+        }
+      })
+      .catch((err: any) => {
+        setError("Could not load disease library: " + err.message);
+      })
+      .finally(() => setLoadingDiseases(false));
   }, []);
 
   /* ───────────────────────────────
@@ -195,6 +293,7 @@ function App() {
     setError("");
     setResult("");
     setCandidates([]);
+    setLoadingAnalyze(true);
 
     const labs = Object.entries(labTests)
       .filter(([, v]) => v !== "")
@@ -216,7 +315,13 @@ function App() {
         name,
         value: parseFloat(v),
         unit:
-          name === "Temp" ? "°C" : name === "HR" ? "bpm" : name === "BP" ? "mmHg" : "%",
+          name === "Temp"
+            ? "°C"
+            : name === "HR"
+            ? "bpm"
+            : name === "BP"
+            ? "mmHg"
+            : "%",
       }));
 
     const payload = {
@@ -230,13 +335,14 @@ function App() {
     };
 
     try {
-      const res = await fetch("https://symphy-api.onrender.com/analyze", {
+      const res = await fetch(`${API_BASE}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("API request failed");
+
       const data = await res.json();
       setResult(JSON.stringify(data, null, 2));
 
@@ -247,16 +353,61 @@ function App() {
           const s = slugify(n);
           const found =
             diseases.find((d) => d.slug === s) ||
-            diseases.find((d) => d.name.toLowerCase() === n.toLowerCase());
+            diseases.find(
+              (d) => d.name.toLowerCase() === n.toLowerCase()
+            ) ||
+            null;
           return { name: n, slug: found?.slug || s, icd, score: c?.score };
         }) || [];
 
       setCandidates(list);
     } catch (e: any) {
       setError(`Error: ${e.message}`);
+    } finally {
+      setLoadingAnalyze(false);
     }
   };
-    /* ───────────────────────────────
+
+  /* ───────────────────────────────
+     Clinician Note Submit
+  ─────────────────────────────── */
+  const handleAddNote = async () => {
+    if (!selectedDisease || !newNote.trim()) return;
+    setNoteError("");
+    setSavingNote(true);
+
+    // Choose identifier: prefer ICD, then slug
+    const identifier = selectedDisease.icd || selectedDisease.slug;
+    try {
+      // Backend endpoint you can implement later:
+      // POST /diseases/{id}/notes  { note: string }
+      await fetch(`${API_BASE}/diseases/${encodeURIComponent(identifier)}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: newNote.trim() }),
+      }).catch(() => {
+        // If backend not ready yet, silently fail and just update UI locally
+        console.warn("Note API not implemented yet; storing locally only.");
+      });
+
+      // Update local state so user sees the note immediately
+      const updated: Disease = {
+        ...selectedDisease,
+        notes_from_doctors: [
+          ...(selectedDisease.notes_from_doctors || []),
+          newNote.trim(),
+        ],
+      };
+      setSelectedDisease(updated);
+      setNewNote("");
+    } catch (e: any) {
+      setNoteError("Could not save note: " + e.message);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  /* ───────────────────────────────
      Small Components
   ─────────────────────────────── */
 
@@ -284,27 +435,37 @@ function App() {
           }}
         />
         <small style={{ color: "#666" }}>
-          {demographicsSet
-            ? spec
-              ? <>Normal: {band?.low}–{band?.high} {spec.unit}</>
-              : <>No reference defined</>
-            : <>Enter age & gender to view range</>}
+          {demographicsSet ? (
+            spec ? (
+              <>
+                Normal: {band?.low}–{band?.high} {spec.unit}
+              </>
+            ) : (
+              <>No reference defined</>
+            )
+          ) : (
+            <>Enter age &amp; gender to view range</>
+          )}
         </small>
       </div>
     );
   };
 
-  const letters = ["All", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))];
+  const letters = ["All", ...Array.from({ length: 26 }, (_, i) =>
+    String.fromCharCode(65 + i)
+  )];
 
   const filteredDiseases = useMemo(() => {
     const q = librarySearch.trim().toLowerCase();
     return diseases.filter((d) => {
-      const okLetter = letter === "All" || d.name.toUpperCase().startsWith(letter);
+      const startLetter = (d.name || "").charAt(0).toUpperCase();
+      const okLetter = letter === "All" || startLetter === letter;
+      const overview = (d.overview || "").toString().toLowerCase();
       const okQuery =
         !q ||
         d.name.toLowerCase().includes(q) ||
         (d.icd || "").toLowerCase().includes(q) ||
-        (d.overview || "").toLowerCase().includes(q);
+        overview.includes(q);
       return okLetter && okQuery;
     });
   }, [diseases, librarySearch, letter]);
@@ -312,9 +473,14 @@ function App() {
   /* ───────────────────────────────
      MAIN LAYOUT / TABS
   ─────────────────────────────── */
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 32 }}>
       <h1>Symphy · Clinical Analyzer</h1>
+      <p style={{ color: "#555", marginBottom: 20, fontSize: 14 }}>
+        Experimental clinical decision support. Not a substitute for clinical
+        judgment. For licensed clinicians only.
+      </p>
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
@@ -462,7 +628,8 @@ function App() {
           })}
         </div>
       )}
-            {/* Vitals Tab */}
+
+      {/* Vitals Tab */}
       {activeTab === "vitals" && (
         <div>
           <h3>Vital Signs</h3>
@@ -476,7 +643,9 @@ function App() {
             <input
               placeholder="Temperature (°C)"
               value={vitals.Temp}
-              onChange={(e) => setVitals({ ...vitals, Temp: e.target.value })}
+              onChange={(e) =>
+                setVitals({ ...vitals, Temp: e.target.value })
+              }
             />
             <input
               placeholder="Heart Rate (bpm)"
@@ -502,6 +671,7 @@ function App() {
         <div>
           <h3>Disease Library</h3>
 
+          {/* Letter filter */}
           <div
             style={{
               display: "flex",
@@ -521,6 +691,7 @@ function App() {
                   border: "1px solid #ccc",
                   borderRadius: 8,
                   fontSize: 14,
+                  cursor: "pointer",
                 }}
               >
                 {L}
@@ -528,6 +699,7 @@ function App() {
             ))}
           </div>
 
+          {/* Search */}
           <input
             placeholder="Search by name, ICD, or keyword…"
             value={librarySearch}
@@ -541,47 +713,94 @@ function App() {
             }}
           />
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: 12,
-            }}
-          >
-            {filteredDiseases.map((d) => (
-              <div
-                key={d.slug}
-                style={{
-                  border: "1px solid #ccc",
-                  borderRadius: 8,
-                  padding: 10,
-                  background: "#fafafa",
-                }}
-              >
-                <strong>{d.name}</strong>
-                {d.icd && (
-                  <p style={{ fontSize: 12, color: "#555" }}>ICD: {d.icd}</p>
-                )}
-                <p style={{ fontSize: 13, color: "#444" }}>
-                  {(d.overview || "").slice(0, 120)}...
-                </p>
-                <button
-                  onClick={() => setSelectedDisease(d)}
+          {/* Loading skeletons */}
+          {loadingDiseases && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 12,
+              }}
+            >
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
                   style={{
-                    background: "#0B6FE3",
-                    color: "white",
-                    border: "none",
-                    padding: "4px 8px",
-                    borderRadius: 4,
-                    cursor: "pointer",
+                    borderRadius: 8,
+                    padding: 10,
+                    background: "#f0f0f0",
+                    height: 110,
+                    animation: "pulse 1.4s ease-in-out infinite",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Disease cards */}
+          {!loadingDiseases && (
+            <>
+              {filteredDiseases.length === 0 ? (
+                <p style={{ color: "#666" }}>No diseases match your filters.</p>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 12,
                   }}
                 >
-                  View Details
-                </button>
-              </div>
-            ))}
-          </div>
+                  {filteredDiseases.map((d) => (
+                    <div
+                      key={d.slug || d.icd || d.name}
+                      style={{
+                        border: "1px solid #ccc",
+                        borderRadius: 8,
+                        padding: 10,
+                        background: "#fafafa",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div>
+                        <strong>{d.name}</strong>
+                        {d.icd && (
+                          <p style={{ fontSize: 12, color: "#555" }}>
+                            ICD: {d.icd}
+                          </p>
+                        )}
+                        <p style={{ fontSize: 13, color: "#444" }}>
+                          {((d.overview || "") as string).slice(0, 120)}...
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedDisease(d);
+                          setNewNote("");
+                          setNoteError("");
+                        }}
+                        style={{
+                          marginTop: 8,
+                          background: "#0B6FE3",
+                          color: "white",
+                          border: "none",
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
 
+          {/* Detailed disease drawer */}
           {selectedDisease && (
             <div
               style={{
@@ -592,98 +811,194 @@ function App() {
                 background: "white",
               }}
             >
-              <h3>{selectedDisease.name}</h3>
-              {selectedDisease.icd && (
-                <p style={{ color: "#666" }}>ICD Code: {selectedDisease.icd}</p>
-              )}
-              <p>{selectedDisease.overview}</p>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <h3 style={{ margin: 0 }}>{selectedDisease.name}</h3>
+                <button
+                  onClick={() => setSelectedDisease(null)}
+                  style={{
+                    background: "#D90429",
+                    color: "white",
+                    border: "none",
+                    padding: "4px 8px",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
 
-              {selectedDisease.symptoms_common && (
+              {selectedDisease.icd && (
+                <p style={{ color: "#666", marginTop: 0 }}>
+                  ICD Code: {selectedDisease.icd}
+                </p>
+              )}
+
+              {selectedDisease.overview && (
+                <>
+                  <h4>Overview</h4>
+                  <p>{selectedDisease.overview}</p>
+                </>
+              )}
+
+              {/* Symptoms */}
+              {normalizeList(selectedDisease.symptoms_common).length > 0 && (
                 <>
                   <h4>Common Symptoms</h4>
                   <ul>
-                    {selectedDisease.symptoms_common.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
+                    {normalizeList(selectedDisease.symptoms_common).map(
+                      (s, i) => (
+                        <li key={i}>{s}</li>
+                      )
+                    )}
                   </ul>
                 </>
               )}
 
-              {selectedDisease.labs_key && (
+              {/* Labs */}
+              {normalizeList(selectedDisease.labs_key).length > 0 && (
                 <>
                   <h4>Key Laboratory Findings</h4>
                   <ul>
-                    {selectedDisease.labs_key.map((s, i) => (
+                    {normalizeList(selectedDisease.labs_key).map((s, i) => (
                       <li key={i}>{s}</li>
                     ))}
                   </ul>
                 </>
               )}
 
-              {selectedDisease.red_flags && (
+              {/* Red flags */}
+              {normalizeList(selectedDisease.red_flags).length > 0 && (
                 <>
                   <h4>Red Flags</h4>
                   <ul>
-                    {selectedDisease.red_flags.map((s, i) => (
+                    {normalizeList(selectedDisease.red_flags).map((s, i) => (
                       <li key={i}>{s}</li>
                     ))}
                   </ul>
                 </>
               )}
 
+              {/* References */}
               {selectedDisease.references && (
                 <>
                   <h4>References</h4>
-                  <ul>
-                    {selectedDisease.references.map((r, i) => (
-                      <li key={i}>
-                        <a
-                          href={r.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{ color: "#0B6FE3" }}
-                        >
-                          {r.title}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
+                  {Array.isArray(selectedDisease.references) ? (
+                    <ul>
+                      {selectedDisease.references.map((r, i) => (
+                        <li key={i}>
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: "#0B6FE3" }}
+                          >
+                            {r.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>{selectedDisease.references}</p>
+                  )}
                 </>
               )}
 
-              <button
-                onClick={() => setSelectedDisease(null)}
+              {/* Clinician Notes */}
+              <div
                 style={{
-                  marginTop: 10,
-                  background: "#D90429",
-                  color: "white",
-                  border: "none",
-                  padding: "6px 10px",
-                  borderRadius: 4,
-                  cursor: "pointer",
+                  marginTop: 16,
+                  paddingTop: 12,
+                  borderTop: "1px solid #ddd",
                 }}
               >
-                Close
-              </button>
+                <h4>Clinician Notes</h4>
+
+                {(selectedDisease.notes_from_doctors || []).length === 0 ? (
+                  <p style={{ color: "#666", fontSize: 13 }}>
+                    No notes have been added yet for this condition.
+                  </p>
+                ) : (
+                  <ul>
+                    {selectedDisease.notes_from_doctors!.map((note, i) => (
+                      <li key={i} style={{ marginBottom: 4 }}>
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <textarea
+                  rows={3}
+                  placeholder="Add a brief note on what helped your patient (tests, treatments, red flags)..."
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  style={{
+                    width: "100%",
+                    marginTop: 8,
+                    padding: 8,
+                    borderRadius: 4,
+                    border: "1px solid #ccc",
+                    fontSize: 13,
+                  }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    onClick={handleAddNote}
+                    disabled={savingNote || !newNote.trim()}
+                    style={{
+                      marginTop: 8,
+                      background: savingNote ? "#888" : "#0B6FE3",
+                      color: "white",
+                      border: "none",
+                      padding: "6px 10px",
+                      borderRadius: 4,
+                      cursor: savingNote ? "default" : "pointer",
+                    }}
+                  >
+                    {savingNote ? "Saving…" : "Save Note (doctor only)"}
+                  </button>
+                  {noteError && (
+                    <span
+                      style={{
+                        marginTop: 8,
+                        color: "red",
+                        fontSize: 12,
+                      }}
+                    >
+                      {noteError}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
       )}
-            {/* Analyze Button */}
+
+      {/* Analyze Button */}
       <div style={{ marginTop: 24 }}>
         <button
           onClick={handleAnalyze}
+          disabled={loadingAnalyze}
           style={{
             padding: "10px 20px",
-            background: "#0B6FE3",
+            background: loadingAnalyze ? "#888" : "#0B6FE3",
             color: "white",
             border: "none",
             borderRadius: 6,
             fontSize: 16,
-            cursor: "pointer",
+            cursor: loadingAnalyze ? "default" : "pointer",
           }}
         >
-          Analyze Patient Data
+          {loadingAnalyze ? "Analyzing…" : "Analyze Patient Data"}
         </button>
       </div>
 
@@ -694,70 +1009,93 @@ function App() {
         </p>
       )}
 
-      {/* AI Matches */}
+      {/* AI Matches - card layout */}
       {candidates.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <h3>Top AI Matches</h3>
-          <ul>
+          <p style={{ color: "#666", fontSize: 13 }}>
+            Ranked suggestions only. Always confirm with clinical reasoning and
+            appropriate testing.
+          </p>
+          <div style={{ display: "grid", gap: 10 }}>
             {candidates.map((c, i) => (
-              <li
+              <div
                 key={i}
                 style={{
                   border: "1px solid #ccc",
-                  padding: 8,
+                  padding: 10,
                   borderRadius: 6,
-                  marginBottom: 6,
+                  background: "#fafafa",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                <strong>{c.name}</strong>
-                {c.icd && <span> (ICD: {c.icd})</span>}
-                {typeof c.score === "number" && (
-                  <span style={{ color: "#666", marginLeft: 6 }}>
-                    Confidence: {(c.score * 100).toFixed(1)}%
-                  </span>
-                )}
                 <div>
-                  <button
-                    onClick={() => {
-                      const hit = diseases.find((d) => d.slug === c.slug);
-                      if (hit) {
-                        setActiveTab("library");
-                        setSelectedDisease(hit);
-                      }
-                    }}
-                    style={{
-                      marginTop: 6,
-                      padding: "4px 8px",
-                      background: "#0B6FE3",
-                      color: "white",
-                      border: "none",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                    }}
-                  >
-                    View Disease Info
-                  </button>
+                  <strong>{c.name}</strong>
+                  {c.icd && (
+                    <span style={{ marginLeft: 6, color: "#555" }}>
+                      (ICD: {c.icd})
+                    </span>
+                  )}
+                  {typeof c.score === "number" && (
+                    <div style={{ color: "#666", fontSize: 12, marginTop: 2 }}>
+                      Confidence: {(c.score * 100).toFixed(1)}%
+                    </div>
+                  )}
                 </div>
-              </li>
+                <button
+                  onClick={() => {
+                    const hit =
+                      diseases.find((d) => d.slug === c.slug) ||
+                      diseases.find(
+                        (d) =>
+                          d.name.toLowerCase() === c.name.toLowerCase()
+                      ) ||
+                      null;
+                    if (hit) {
+                      setActiveTab("library");
+                      setSelectedDisease(hit);
+                    }
+                  }}
+                  style={{
+                    padding: "6px 10px",
+                    background: "#0B6FE3",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                >
+                  View Disease Info
+                </button>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
-      {/* Raw JSON result */}
+      {/* Raw JSON result (debug) */}
       {result && (
-        <pre
-          style={{
-            background: "#f3f3f3",
-            padding: 10,
-            borderRadius: 6,
-            marginTop: 10,
-            overflowX: "auto",
-            fontSize: 13,
-          }}
-        >
-          {result}
-        </pre>
+        <details style={{ marginTop: 16 }}>
+          <summary style={{ cursor: "pointer", fontSize: 13 }}>
+            Debug: Raw API response
+          </summary>
+          <pre
+            style={{
+              background: "#f3f3f3",
+              padding: 10,
+              borderRadius: 6,
+              marginTop: 8,
+              overflowX: "auto",
+              fontSize: 13,
+            }}
+          >
+            {result}
+          </pre>
+        </details>
       )}
     </div>
   );
@@ -769,44 +1107,13 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 
-
-frontend/index.html:
-
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Symphy</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-
-
-frontend/package.json:
-
-{
-  "name": "symphy-frontend",
-  "private": true,
-  "version": "0.0.1",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 5173"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.8"
-  }
+/* Optional simple skeleton animation */
+const style = document.createElement("style");
+style.innerHTML = `
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
 }
+`;
+document.head.appendChild(style);
