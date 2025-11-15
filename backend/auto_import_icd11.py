@@ -1,12 +1,12 @@
 # backend/auto_import_icd11.py
-# Purpose: Fetch ICD-11 data and insert into the "public.diseases" table
+# Purpose: Safe ICD-11 import without deleting table on each worker restart
 
 import os
 import time
 import requests
-from sqlalchemy import create_engine, text
 import certifi
 import urllib3
+from sqlalchemy import create_engine, text
 
 # Optional slug helper
 try:
@@ -14,22 +14,22 @@ try:
 except ImportError:
     slugify = lambda x: ""
 
-# Disable warnings for WHO API SSL (trusted)
+# Disable SSL warnings (WHO API uses custom cert chain)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Ensure SSL paths are correct
+# Ensure SSL paths
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
-# WHO ICD-11 API constants
+# WHO ICD-11 constants
 WHO_TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 WHO_ENTITY_BASE = "https://id.who.int/icd/entity"
-WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"  # Multi-version root
+WHO_FOUNDATION_ROOT = "https://id.who.int/icd/release/11/mms"
 
 
-# --------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # AUTH HELPERS
-# --------------------------------------------------------------------
+# --------------------------------------------------------------------------
 
 def _headers(token: str):
     return {
@@ -40,7 +40,7 @@ def _headers(token: str):
     }
 
 
-def get_token() -> str:
+def get_token():
     client_id = os.getenv("WHO_CLIENT_ID")
     client_secret = os.getenv("WHO_CLIENT_SECRET")
 
@@ -48,6 +48,7 @@ def get_token() -> str:
         raise RuntimeError("❌ Missing WHO_CLIENT_ID or WHO_CLIENT_SECRET")
 
     print("🔑 Requesting WHO API token...")
+
     resp = requests.post(
         WHO_TOKEN_URL,
         data={"grant_type": "client_credentials", "scope": "icdapi_access"},
@@ -56,17 +57,17 @@ def get_token() -> str:
     )
 
     if resp.status_code != 200:
-        raise RuntimeError(f"❌ WHO token failed: {resp.status_code} {resp.text}")
+        raise RuntimeError(f"❌ WHO token error: {resp.status_code} {resp.text}")
 
     print("✅ WHO token OK")
     return resp.json()["access_token"]
 
 
-# --------------------------------------------------------------------
-# ICD ENTITY HELPERS
-# --------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# ENTITY HELPERS
+# --------------------------------------------------------------------------
 
-def normalize_entity_id(entity) -> str | None:
+def normalize_entity_id(entity):
     if isinstance(entity, str):
         return entity.rstrip("/").split("/")[-1]
     if isinstance(entity, dict):
@@ -76,18 +77,18 @@ def normalize_entity_id(entity) -> str | None:
     return None
 
 
-def get_entity(entity_id: str, token: str) -> dict | None:
+def get_entity(entity_id, token):
     url = f"{WHO_ENTITY_BASE}/{entity_id}"
     r = requests.get(url, headers=_headers(token), verify=False)
 
     if r.status_code == 200:
         return r.json()
 
-    print(f"⚠️ Could not fetch {entity_id}: {r.status_code}")
+    print(f"⚠️ Failed entity {entity_id}: {r.status_code}")
     return None
 
 
-def traverse_children(entity_id: str, token: str, depth: int, max_depth: int):
+def traverse_children(entity_id, token, depth, max_depth):
     if depth > max_depth:
         return []
 
@@ -97,7 +98,6 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int):
 
     title = (ent.get("title") or {}).get("@value") or ent.get("title", "Unknown")
     definition = (ent.get("definition") or {}).get("@value") or ""
-
     slug = slugify(title)
 
     collected = [{
@@ -111,25 +111,24 @@ def traverse_children(entity_id: str, token: str, depth: int, max_depth: int):
         cid = normalize_entity_id(child)
         if not cid:
             continue
-
         time.sleep(0.12)
         collected.extend(traverse_children(cid, token, depth + 1, max_depth))
 
     return collected
 
 
-# --------------------------------------------------------------------
-# MAIN AUTO IMPORT FUNCTION
-# --------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# IMPORT PIPELINE
+# --------------------------------------------------------------------------
 
 def run_auto_import():
-    print("🔗 Connecting to DB...")
+    print("🔗 Connecting to database...")
 
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise RuntimeError("❌ DATABASE_URL missing")
 
-    # Force public schema for the worker (CRITICAL FIX)
+    # Force public schema
     engine = create_engine(
         db_url,
         connect_args={"options": "-c search_path=public"}
@@ -137,62 +136,67 @@ def run_auto_import():
 
     print(f"🧠 Using DB: {db_url[:25]}...{db_url[-10:]}")
 
-    # ----------------------------------------------------------------
-    # RESET TABLE (in public schema)
-    # ----------------------------------------------------------------
-    print("🧹 Resetting public.diseases table...")
+    # ----------------------------------------------------------------------
+    # SAFE TABLE HANDLING — never drop
+    # ----------------------------------------------------------------------
+    print("🧪 Checking if diseases table exists...")
 
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS public.diseases;"))
+        exists = conn.execute(text("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema='public'
+                AND table_name='diseases'
+            )
+        """)).scalar()
 
-        conn.execute(text("""
-            CREATE TABLE public.diseases (
-                id SERIAL PRIMARY KEY,
-                icd TEXT UNIQUE,
-                name TEXT,
-                slug TEXT,              -- FIXED: not unique
-                overview TEXT,
-                symptoms_common TEXT,
-                labs_key TEXT,
-                red_flags TEXT,
-                "references" TEXT
-            );
-        """))
+        if not exists:
+            print("📘 Table not found — creating...")
+            conn.execute(text("""
+                CREATE TABLE diseases (
+                    id SERIAL PRIMARY KEY,
+                    icd TEXT UNIQUE,
+                    name TEXT,
+                    slug TEXT,
+                    overview TEXT,
+                    symptoms_common TEXT,
+                    labs_key TEXT,
+                    red_flags TEXT,
+                    "references" TEXT
+                );
+            """))
+            print("✅ Table created.")
+        else:
+            print("📗 Table exists — preserving data (no DROP).")
 
-    print("✅ Table recreated clean in schema: public")
-
-    # ----------------------------------------------------------------
-    # FETCH TOKEN + ROOT
-    # ----------------------------------------------------------------
-
+    # ----------------------------------------------------------------------
+    # GET WHO TOKEN
+    # ----------------------------------------------------------------------
     token = get_token()
 
-    print("🌍 Fetching MMS multi-version root...")
-    r0 = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
-    if r0.status_code != 200:
-        raise RuntimeError(f"❌ MMS root fetch failed: {r0.status_code}")
+    print("🌍 Fetching ICD-11 MMS root...")
+    root_resp = requests.get(WHO_FOUNDATION_ROOT, headers=_headers(token), verify=False)
 
-    multi = r0.json()
+    if root_resp.status_code != 200:
+        raise RuntimeError("❌ Failed to fetch MMS root")
+
+    multi = root_resp.json()
     latest_url = multi.get("latestVersion") or multi.get("latestRelease")
 
     if not latest_url:
-        raise RuntimeError("❌ No latest version found")
+        raise RuntimeError("❌ No latest release found")
 
-    print(f"📌 Latest ICD version: {latest_url}")
+    print(f"📌 Using ICD version: {latest_url}")
 
-    r1 = requests.get(latest_url, headers=_headers(token), verify=False)
-    if r1.status_code != 200:
-        raise RuntimeError("❌ Failed to fetch version root")
+    version_resp = requests.get(latest_url, headers=_headers(token), verify=False)
+    version_root = version_resp.json()
 
-    version_root = r1.json()
     roots = version_root.get("child", []) or []
+    print(f"📁 Top-level sections: {len(roots)}")
 
-    print(f"📁 Top-level entities: {len(roots)}")
-
-    # ----------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # RECURSIVE DOWNLOAD
-    # ----------------------------------------------------------------
-
+    # ----------------------------------------------------------------------
     MAX_DEPTH = int(os.getenv("ICD_DEPTH", "2"))
     all_items = []
 
@@ -200,16 +204,14 @@ def run_auto_import():
         rid = normalize_entity_id(entry)
         if not rid:
             continue
-
         time.sleep(0.15)
         all_items.extend(traverse_children(rid, token, 0, MAX_DEPTH))
 
-    print(f"📦 Total collected ICD items: {len(all_items)}")
+    print(f"📦 Total collected: {len(all_items)}")
 
-    # ----------------------------------------------------------------
-    # BULK INSERT
-    # ----------------------------------------------------------------
-
+    # ----------------------------------------------------------------------
+    # BULK INSERT / UPSERT
+    # ----------------------------------------------------------------------
     if all_items:
         batch_size = 400
 
@@ -220,30 +222,30 @@ def run_auto_import():
                 try:
                     conn.execute(
                         text("""
-                            INSERT INTO public.diseases
+                            INSERT INTO diseases
                             (icd, name, slug, overview, symptoms_common, labs_key, red_flags, "references")
                             VALUES (:icd, :name, :slug, :overview, NULL, NULL, NULL, 'Imported from WHO ICD-11')
                             ON CONFLICT (icd) DO UPDATE SET
-                                name = EXCLUDED.name,
-                                slug = EXCLUDED.slug,
-                                overview = EXCLUDED.overview;
+                                name=EXCLUDED.name,
+                                slug=EXCLUDED.slug,
+                                overview=EXCLUDED.overview;
                         """),
                         batch
                     )
                     conn.commit()
-
-                    print(f"✅ Inserted batch {i//batch_size+1}")
+                    print(f"✅ Batch {i//batch_size + 1} inserted")
 
                 except Exception as e:
-                    print(f"⚠️ Batch failed: {e}")
+                    print(f"⚠️ Batch insert failed: {e}")
                     conn.rollback()
 
-            final_count = conn.execute(text("SELECT COUNT(*) FROM public.diseases")).scalar()
-            print(f"🎉 Final row count: {final_count}")
+            # final count
+            final = conn.execute(text("SELECT COUNT(*) FROM diseases")).scalar()
+            print(f"🎉 Final total rows: {final}")
 
-    print("🎯 ICD-11 import finished successfully.")
+    print("🎯 ICD-11 import COMPLETED successfully.")
 
 
 if __name__ == "__main__":
-    print("🚀 auto_import_icd11.py running...")
+    print("🚀 Worker started — running auto import")
     run_auto_import()
