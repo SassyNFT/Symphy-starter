@@ -217,3 +217,97 @@ def debug_rows():
         return {"sample_rows": [dict(r._mapping) for r in rows]}
     except Exception as e:
         return {"error": str(e)}
+
+# -----------------------------
+# AUTHENTICATION
+# -----------------------------
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from passlib.context import CryptContext
+import jwt
+from datetime import datetime, timedelta
+
+SECRET_KEY = os.getenv("AUTH_SECRET", "super-secret-key")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Create users table if missing
+with engine.begin() as conn:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            hashed_password TEXT NOT NULL,
+            role TEXT DEFAULT 'doctor',
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+    """))
+
+
+def hash_password(password: str):
+    return pwd_context.hash(password)
+
+def verify_password(plain, hashed):
+    return pwd_context.verify(plain, hashed)
+
+def create_token(data: dict):
+    to_encode = data.copy()
+    to_encode["exp"] = datetime.utcnow() + timedelta(hours=6)
+    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+
+
+# -----------------------------
+# SIGNUP
+# -----------------------------
+@app.post("/auth/signup")
+def signup(email: str, password: str, role: str = "doctor"):
+    try:
+        hashed = hash_password(password)
+
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO users (email, hashed_password, role)
+                VALUES (:email, :pw, :role)
+            """), {"email": email, "pw": hashed, "role": role})
+
+        return {"message": "Account created successfully"}
+
+    except Exception as e:
+        if "duplicate key value" in str(e).lower():
+            raise HTTPException(400, "Email already registered")
+        raise HTTPException(500, str(e))
+
+
+# -----------------------------
+# LOGIN
+# -----------------------------
+@app.post("/auth/login")
+def login(form: OAuth2PasswordRequestForm = Depends()):
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT * FROM users WHERE email = :email
+        """), {"email": form.username}).fetchone()
+
+    if not row:
+        raise HTTPException(400, "Invalid email or password")
+
+    if not verify_password(form.password, row.hashed_password):
+        raise HTTPException(400, "Invalid email or password")
+
+    token = create_token({"sub": row.email, "role": row.role})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# -----------------------------
+# AUTH REQUIRED EXAMPLE
+# -----------------------------
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return decoded
+    except:
+        raise HTTPException(401, "Invalid or expired token")
+
+@app.get("/me")
+def get_me(user=Depends(get_current_user)):
+    return user
