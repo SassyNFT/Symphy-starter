@@ -1,3 +1,4 @@
+import LoginPage from "./pages/LoginPage";
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
@@ -1001,4 +1002,17 @@ function App() {
    RENDER ROOT
 ────────────────────────────────────────────────────────────── */
 
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+function RootWrapper() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem("symphy_token"));
+
+  if (!token) {
+    return <LoginPage onLogin={(t) => {
+      localStorage.setItem("symphy_token", t);
+      setToken(t);
+    }} />;
+  }
+
+  return <App />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(<RootWrapper />);
